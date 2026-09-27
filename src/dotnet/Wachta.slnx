@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Wachta.Api/Wachta.Api.csproj" />
+  <Project Path="Wachta.Db/Wachta.Db.csproj" />
+  <Project Path="Wachta.Domain/Wachta.Domain.csproj" />
+  <Project Path="Wachta.Ingestion/Wachta.Ingestion.csproj" />
+  <Project Path="Wachta.Tests/Wachta.Tests.csproj" />
+</Solution>

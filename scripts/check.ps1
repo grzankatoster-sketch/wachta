@@ -36,13 +36,25 @@ Step "front: testy jednostkowe" { Set-Location "$root\web"; npm test }
 Step "front: kontrola typow i budowa" { Set-Location "$root\web"; npm run build }
 Step "front: testy w przegladarce" { Set-Location "$root\web"; npx playwright test }
 
-$sdks = if (Get-Command dotnet -ErrorAction SilentlyContinue) { dotnet --list-sdks 2>$null } else { $null }
-if ($sdks) {
-    Step "C# (dotnet test)" { Set-Location "$root\src\dotnet"; dotnet test }
+# SDK bywa w profilu uzytkownika, bo instalator dotnet-install.ps1 nie wymaga admina i domyslnie
+# nie dopisuje sie do PATH. Systemowy dotnet.exe moze byc samym runtime, wiec nie wystarczy go
+# znalezc - trzeba sprawdzic, czy w ogole widzi jakis SDK.
+$dotnet = $null
+foreach ($candidate in @("$env:USERPROFILE\.dotnet\dotnet.exe", (Get-Command dotnet -ErrorAction SilentlyContinue).Source)) {
+    if ($candidate -and (Test-Path $candidate) -and (& $candidate --list-sdks 2>$null)) { $dotnet = $candidate; break }
+}
+if ($dotnet) {
+    Step "C# (dotnet test)" {
+        Set-Location "$root\src\dotnet"
+        $env:DOTNET_ROOT = Split-Path -Parent $dotnet
+        $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+        & $dotnet test
+    }
 } else {
     Write-Host ""
     Write-Host "=== testy C# - POMINIETE ===" -ForegroundColor Yellow
-    Write-Host "brak .NET SDK: winget install -e --id Microsoft.DotNet.SDK.10"
+    Write-Host "brak .NET SDK. Bez admina: iwr https://dot.net/v1/dotnet-install.ps1 -OutFile i.ps1; ./i.ps1 -Channel 10.0"
+    Write-Host "Z adminem: winget install -e --id Microsoft.DotNet.SDK.10"
 }
 
 Set-Location $root

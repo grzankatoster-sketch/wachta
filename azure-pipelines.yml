@@ -1,11 +1,85 @@
+# Walidacja projektu WACHTA. Kolejnosc jest celowa: najpierw to, co jest tanie i lapie najwiecej
+# (testy detektorow), potem kompilacja C#, a na koncu bramka, ktora porownuje wyniki detektorow na
+# zamrozonych danych z zapisanym wzorcem.
+#
+# Czego tu NIE ma: testow integracyjnych z baza w kontenerze. Wymagaja Dockera i sa pomijane z
+# jawnym powodem (patrz Wachta.Tests/DockerFact.cs oraz src/python/tests/integration).
+
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+stages:
+  - stage: Test
+    displayName: Testy
+    jobs:
+      - job: python
+        displayName: Detektory (Python)
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.12'
+          - script: pip install -e src/python pytest
+            displayName: zaleznosci (z pyproject.toml)
+          - script: python -m pytest -q
+            displayName: pytest (bez integracyjnych)
+
+      - job: dotnet
+        displayName: Ingestia i API (C#)
+        steps:
+          - task: UseDotNet@2
+            inputs:
+              version: '10.0.x'
+          - script: dotnet build src/dotnet/Wachta.slnx --configuration Release
+            displayName: kompilacja
+          - script: dotnet test src/dotnet/Wachta.slnx --configuration Release --no-build
+            displayName: testy jednostkowe
+
+      - job: web
+        displayName: Mapa (front)
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '22.x'
+          - script: npm ci
+            workingDirectory: web
+            displayName: zaleznosci
+          - script: npm test
+            workingDirectory: web
+            displayName: testy jednostkowe
+          - script: npm run build
+            workingDirectory: web
+            displayName: kontrola typow i budowa
+
   - stage: Eval
+    displayName: Bramka detektorow
     dependsOn: Test
     jobs:
       - job: eval
+        displayName: Jakosc i regresja na zamrozonych danych
         steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.12'
           - script: curl -LsSf https://astral.sh/uv/install.sh | sh
-            displayName: install uv
+            displayName: instalacja uv
           - script: |
               export PATH="$HOME/.local/bin:$PATH"
               uv run --project src/python python eval/run_eval.py --check eval/baseline.json
-            displayName: detector eval gate
+            displayName: bramka detektorow
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            inputs:
+              targetPath: eval/results
+              artifact: wyniki-ewaluacji

@@ -7,7 +7,7 @@ namespace Wachta.Tests;
 [Collection("postgres")]
 public sealed class PositionWriterTests(PostgresFixture db)
 {
-    [Fact]
+    [DockerFact]
     public async Task Writes_positions_and_fetch_log_with_provenance()
     {
         await using var ds = NpgsqlDataSource.Create(db.ConnectionString);
@@ -35,7 +35,7 @@ public sealed class PositionWriterTests(PostgresFixture db)
         Assert.Equal(2, r.GetInt32(1));
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Contacts_are_upserted_and_never_go_backwards()
     {
         await using var ds = NpgsqlDataSource.Create(db.ConnectionString);
@@ -55,7 +55,7 @@ public sealed class PositionWriterTests(PostgresFixture db)
         Assert.False(await r.IsDBNullAsync(1));
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Empty_batch_still_logs_fetch()
     {
         await using var ds = NpgsqlDataSource.Create(db.ConnectionString);

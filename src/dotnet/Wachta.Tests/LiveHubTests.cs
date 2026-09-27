@@ -8,7 +8,7 @@ namespace Wachta.Tests;
 [Collection("postgres")]
 public sealed class LiveHubTests(PostgresFixture db)
 {
-    [Fact]
+    [DockerFact]
     public async Task Hub_pushes_aircraft_within_ten_seconds()
     {
         Environment.SetEnvironmentVariable("ConnectionStrings__Wachta", db.ConnectionString);

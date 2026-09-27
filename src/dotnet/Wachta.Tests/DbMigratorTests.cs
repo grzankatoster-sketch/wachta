@@ -5,7 +5,7 @@ namespace Wachta.Tests;
 [Collection("postgres")]
 public sealed class DbMigratorTests(PostgresFixture db)
 {
-    [Theory]
+    [DockerTheory]
     [InlineData("source")]
     [InlineData("fetch_log")]
     [InlineData("aircraft_position")]
@@ -21,7 +21,7 @@ public sealed class DbMigratorTests(PostgresFixture db)
         Assert.True((bool)(await cmd.ExecuteScalarAsync())!);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Aircraft_position_is_hypertable()
     {
         await using var conn = new NpgsqlConnection(db.ConnectionString);
@@ -31,7 +31,7 @@ public sealed class DbMigratorTests(PostgresFixture db)
         Assert.Equal(1L, (long)(await cmd.ExecuteScalarAsync())!);
     }
 
-    [Fact]
+    [DockerFact]
     public void Migration_is_idempotent()
     {
         Wachta.Db.DbMigrator.Migrate(db.ConnectionString);

@@ -36,7 +36,7 @@ public sealed class ApiTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _factory.DisposeAsync();
 
-    [Fact]
+    [DockerFact]
     public async Task Live_returns_latest_position_per_aircraft_from_last_two_minutes()
     {
         var live = await _client.GetFromJsonAsync<List<LiveAircraft>>("/api/aircraft/live");
@@ -45,14 +45,14 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.DoesNotContain(live!, a => a.Hex == "api003");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Live_military_only_filters_civil()
     {
         var live = await _client.GetFromJsonAsync<List<LiveAircraft>>("/api/aircraft/live?militaryOnly=true");
         Assert.DoesNotContain(live!, a => a.Hex == "api002");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Live_bbox_filters_by_position()
     {
         var live = await _client.GetFromJsonAsync<List<LiveAircraft>>("/api/aircraft/live?minLat=53&minLon=17&maxLat=54.5&maxLon=18.5");
@@ -60,7 +60,7 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.DoesNotContain(live!, a => a.Hex == "api001");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Track_returns_points_in_time_order()
     {
         var from = DateTime.UtcNow.AddMinutes(-5).ToString("O");
@@ -70,14 +70,14 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.True(track[0].Ts < track[1].Ts);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Track_window_over_24h_is_rejected()
     {
         var res = await _client.GetAsync($"/api/aircraft/api001/track?from={DateTime.UtcNow.AddDays(-2):O}&to={DateTime.UtcNow:O}");
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Sources_lists_seeded_sources_with_license()
     {
         var sources = await _client.GetFromJsonAsync<List<SourceInfo>>("/api/sources");

@@ -449,6 +449,40 @@ znalazla wzorca i bramka przepuszczala wszystkie cztery mutacje, zglaszajac ziel
 tylko dlatego, ze mutacje mialy obowiazek zaswiecic na czerwono. Bramka, ktorej sie nie zmutowalo,
 jest wartа tyle co jej brak.
 
+## Warstwa C# wreszcie skompilowana (2026-09-27)
+
+SDK zainstalowany do profilu uzytkownika - bez admina, bez WSL, bez zmian w systemie. Pierwsza w
+historii tego kodu kompilacja dala **6 bledow**, wszystkie prawdziwe:
+
+| blad | co bylo nie tak |
+|---|---|
+| 2x CS8629 w `AdsbV2Parser` | kompilator nie wiaze osobnego `bool hasPosition` z tym, ze `lat` i `lon` nie sa null. Poprawka rozpakowuje je wzorcem `is not { } latitude`, wiec nie-nullowosc **wynika z warunku**, a nie z wykrzyknika, ktory jest obietnica bez pokrycia |
+| 4x CS0246 w `Wachta.Api` | `AlertDto`, `JammingDto` i `ReplayPath` byly uzywane w trzech miejscach, ale **nigdy nie powstaly**. Plan podaje ich dokladny ksztalt (linie 3137-3139) - po prostu nie trafily do `Dtos.cs` |
+
+Po nich jeden blad wiecej, z `TreatWarningsAsErrors`: przestarzaly konstruktor `PostgreSqlBuilder()`
+w Testcontainers. Obraz idzie teraz do konstruktora i jest stala obok komentarza, dlaczego musi byc
+ten sam co w `compose.yaml`.
+
+**Testy: 22 przechodzi, 0 bledow, 13 pominietych.** Poczatkowo 18 z nich **oblewalo** ze stosem
+wywolan z Docker.DotNet, bo Testcontainers odpowiada na pytanie "czy jest Docker" rzucajac wyjatkiem.
+Osiemnascie czerwonych "nie da sie tu uruchomic" skutecznie chowa te, ktore by cos znaczyly. Dodalem
+`DockerFact` i `DockerTheory` - sprawdzaja obecnosc gniazda (`\\.\pipe\docker_engine`) cicho i tanio,
+i pomijaja test z czytelnym powodem. `PostgresFixture` buduje kontener dopiero w `InitializeAsync`,
+bo samo zbudowanie go szukalo Dockera, zanim ktorykolwiek test zdazyl sie pominac.
+
+## CI, ktore nigdy by nie ruszylo
+
+Przy okazji obejrzalem `azure-pipelines.yml` z dzialajacym lancuchem narzedzi w reku i okazalo sie,
+ze to **fragment**: `dependsOn: Test` przy nieistniejacym etapie `Test`, bez `stages:`, bez `pool`,
+bez `trigger`. Ten plik nie uruchomilby sie nigdy. Napisany od nowa: etap `Test` (Python, C#, front
+rownolegle) i etap `Eval` z bramka detektorow oraz publikacja wynikow jako artefakt.
+
+`scripts/check.ps1` szukal SDK przez systemowy `dotnet.exe`, ktory tutaj jest **samym runtime** -
+wiec pomijalby testy C# mimo zainstalowanego SDK. Teraz sprawdza tez `~/.dotnet` i wymaga, zeby
+kandydat naprawde widzial jakis SDK, a nie tylko istnial.
+
+Pelny przebieg `scripts/check.ps1`: **WSZYSTKO ZIELONE**.
+
 ## Uwagi
 
 - **Nic nie jest zacommitowane.** Zgodnie z Twoją zasadą nie robię commitów bez zgody. 119 plików
@@ -457,8 +491,10 @@ jest wartа tyle co jej brak.
   cd C:\Users\grzan\wachta
   git commit -m "feat: wachta skeleton - detectors, web map, eval gate, docs"
   ```
-- **Kod C# nie był kompilowany** — nie ma SDK. Jest przepisany z planu, ale to jedyna warstwa bez
-  weryfikacji. Spodziewaj się drobnych poprawek składni przy pierwszym `dotnet build`.
+- **Kod C# jest skompilowany i przetestowany** (2026-09-27). SDK .NET 10.0.401 zainstalowany
+  **do profilu uzytkownika** (`~/.dotnet`, bez admina, bez zmian w systemie) skryptem
+  `dotnet-install.ps1`. Wynik: **22 testy jednostkowe przechodza, 0 bledow, 13 pominietych**
+  z jawnym powodem (wymagaja bazy w kontenerze).
 - **Przegląd C# na sucho** (bez kompilatora) wyłapał jeden realny błąd: tablica `object[]` z `DBNull`
   nie mapuje się na `timestamptz[]` w zapisie kontaktów — poprawione na `DateTime?[]` w kodzie i w planie.
 - **Wersje pakietów NuGet są ustawione na `*`**, bo nie mogłem sprawdzić, które istnieją. Po

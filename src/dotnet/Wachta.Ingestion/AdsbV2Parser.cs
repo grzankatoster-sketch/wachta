@@ -42,7 +42,12 @@ public static class AdsbV2Parser
             var seenMessage = GetDouble(a, "seen") ?? seenPos ?? 0;
             contacts.Add(new AircraftContact(hex, sourceNow.AddSeconds(-seenMessage), positionTime));
 
-            if (!hasPosition || fetchedAt - positionTime!.Value > TimeSpan.FromSeconds(maxPositionAgeSeconds))
+            // Rozpakowane wzorcem, a nie przez ".Value" po osobnym bool-u: kompilator nie wiaze
+            // "hasPosition" z tym, ze lat i lon nie sa null, wiec tamta wersja wymagalaby "!",
+            // czyli obietnicy bez pokrycia. Tu nie-nullowosc wynika wprost z warunku.
+            if (lat is not { } latitude || lon is not { } longitude
+                || positionTime is not { } fixedAt
+                || fetchedAt - fixedAt > TimeSpan.FromSeconds(maxPositionAgeSeconds))
             {
                 continue;
             }
@@ -58,15 +63,15 @@ public static class AdsbV2Parser
                 Flight: string.IsNullOrEmpty(flight) ? null : flight,
                 TypeCode: GetString(a, "t"),
                 IsMilitary: forceMilitary || ((int)(GetDouble(a, "dbFlags") ?? 0) & MilitaryDbFlag) != 0,
-                Lat: lat.Value,
-                Lon: lon.Value,
+                Lat: latitude,
+                Lon: longitude,
                 AltBaroFt: onGround ? null : altFt,
                 OnGround: onGround,
                 GroundSpeedKt: (float?)GetDouble(a, "gs"),
                 TrackDeg: (float?)GetDouble(a, "track"),
                 Nic: (short?)GetDouble(a, "nic"),
                 NacP: (short?)GetDouble(a, "nac_p"),
-                Timestamp: positionTime.Value));
+                Timestamp: fixedAt));
         }
 
         return new ParseResult(result, contacts);
