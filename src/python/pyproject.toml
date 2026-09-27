@@ -1,0 +1,18 @@
+[project]
+name = "wachta-detectors"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.2",
+    "h3>=4.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "testcontainers[postgres]>=4.8",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = ["integration: requires Docker"]

@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WACHTA — demo</title>
+<link href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d1117; color: #e6edf3; font-family: system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; }
+  .box { position: absolute; z-index: 1; background: #0d1117e6; border-radius: 8px; padding: 12px 14px; }
+  #title { top: 12px; left: 12px; max-width: 330px; }
+  #title h1 { font-size: 16px; margin: 0 0 6px; }
+  #title p { font-size: 12px; margin: 0; color: #8b949e; line-height: 1.5; }
+  #stats { top: 12px; right: 12px; font-size: 13px; }
+  #stats b { color: #e6edf3; }
+  #stats div { margin: 3px 0; color: #8b949e; }
+  #legend { bottom: 34px; left: 12px; font-size: 12px; line-height: 1.8; }
+  #wsparcie { top: 12px; right: 250px; font-size: 12px; max-width: 230px; }
+  #wsparcie table { border-collapse: collapse; margin-top: 8px; width: 100%; }
+  #wsparcie td { padding: 1px 0; }
+  #wsparcie td.kwota { text-align: right; color: #93c5fd; font-variant-numeric: tabular-nums; }
+  .muted { color: #8b949e; font-size: 11px; }
+  #legend i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: middle; }
+  #legend s { display: inline-block; width: 16px; height: 3px; margin-right: 6px; vertical-align: middle; }
+  footer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 6px 12px;
+           background: #0d1117cc; font-size: 11px; color: #8b949e; }
+  .maplibregl-popup-content { background: #161b22; color: #e6edf3; font-size: 12px; border-radius: 6px; }
+  .maplibregl-popup-tip { border-top-color: #161b22 !important; border-bottom-color: #161b22 !important; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="box" id="title">
+  <h1>WACHTA — podgląd</h1>
+  <p>Dane publiczne złożone bez bazy i bez serwera. W powietrzu: samoloty z jednego odczytu,
+     zakłócenia GPS policzone z godziny danych i <b>tory dyżurne</b> — samoloty, które przestały
+     lecieć z A do B i chodzą tam i z powrotem po jednej linii. Na morzu: kable podmorskie, statki
+     Zatoki Fińskiej zestawione z listami sankcyjnymi i ich obserwowane trasy. Na lądzie: zdarzenia
+     z GDELT (kto, komu, co i w ilu doniesieniach), linia frontu, wsparcie dla Ukrainy, wydarzenia
+     opisane przez dwie strony inaczej oraz miejsca, w których liczba doniesień złamała własny rytm.
+     Każdy punkt można kliknąć — pokazuje, skąd się wziął i czego nie wie.</p>
+</div>
+
+<div class="box" id="stats">
+  <div>samoloty w obszarze: <b>__N_AIRCRAFT__</b></div>
+  <div>w tym wojskowe: <b>__N_MILITARY__</b></div>
+  <div>komórki z zakłóceniami GPS: <b>__N_JAMMING__</b></div>
+  <div>odcinki kabli i rurociągów: <b>__N_CABLES__</b></div>
+  <div>statki (Zatoka Finska): <b>__N_SHIPS__</b></div>
+  <div>dopasowane do wykazów: <b>__N_FLAGGED__</b></div>
+  <div>w tym listy sankcyjne: <b>__N_SANCTIONED__</b></div>
+  <div>w tym bez listy sankcyjnej: <b>__N_INSPECTED__</b></div>
+  <div>oznaczone jako flota cieni: <b>__N_SHADOW__</b></div>
+  <div>zdarzenia lądowe (__EVENT_HOURS__ h): <b>__N_EVENTS__</b></div>
+  <div>w tym walki i przemoc: <b>__N_CONFLICT__</b></div>
+  <div>w tym pomoc: <b>__N_AID__</b></div>
+  <div>wsparcie dla Ukrainy: <b>__AID_TOTAL__ mld $</b></div>
+  <div>w tym wojskowe: <b>__AID_MILITARY__ mld $</b></div>
+  <div>wydarzenia w dwóch wersjach: <b>__N_VERSIONS__</b></div>
+  <div>obszary linii frontu: <b>__N_FRONT__</b></div>
+  <div>obserwowane trasy statków: <b>__N_TRACKS__</b></div>
+  <div>nietypowe skupiska (__SPIKE_WINDOW__ h): <b>__N_ANOMALIES__</b></div>
+  <div>tory dyżurne w powietrzu: <b>__N_LOITERS__</b></div>
+  <div>w tym tankowce: <b>__N_TANKERS__</b></div>
+  <div>cisza AIS w ruchu (__GAP_DAY__): <b>__N_GAPS__</b></div>
+  <div>przeładunki burta w burtę: <b>__N_STS__</b></div>
+  <div>numery w dwóch miejscach: <b>__N_IDENTITY__</b></div>
+  <div>odczyt: <b>__STAMP__</b></div>
+</div>
+
+<div class="box" id="wsparcie">
+  <b>Kto ile dał Ukrainie</b><br>
+  <span class="muted">przekazane, nie obiecane · mld $ · Kiel Institute</span>
+  <table id="wsparcie-lista"></table>
+</div>
+
+<div class="box" id="legend">
+  <div><i style="background:#e63946"></i> samolot wojskowy</div>
+  <div><i style="background:#3f4b5b"></i> samolot cywilny</div>
+  <div><i style="background:#e63946;opacity:.55"></i> GPS: co najmniej 10% zakłóconych</div>
+  <div><i style="background:#ffbe00;opacity:.55"></i> GPS: 2–10% zakłóconych</div>
+  <div><s style="background:#7dd3fc"></s> kabel energetyczny</div>
+  <div><s style="background:#c4b5fd"></s> kabel telekomunikacyjny</div>
+  <div><s style="background:#fbbf24"></s> rurociąg</div>
+  <div><i style="background:#f97316;border-radius:50%"></i> statek: flota cieni</div>
+  <div><i style="background:#eab308;border-radius:50%"></i> statek dopasowany do wykazu (kliknij: sankcje czy inspekcja)</div>
+  <div><i style="background:#0ea5e9;border-radius:50%"></i> pozostałe statki</div>
+  <div><i style="background:#dc2626"></i> zdarzenie: walka, napaść, groźba</div>
+  <div><i style="background:#22c55e"></i> zdarzenie: pomoc</div>
+  <div><i style="background:#3b82f6;border-radius:50%"></i> darczyńca (lista po prawej)</div>
+  <div><i style="background:#a855f7;border-radius:50%"></i> opisane przez dwie strony (kliknij)</div>
+  <div><i style="background:#f43f5e;border-radius:50%"></i> nietypowe skupisko doniesień</div>
+  <div><i style="background:#14b8a6;border-radius:50%"></i> samolot na dyżurze — tor wyścigowy (kliknij)</div>
+  <div><i style="background:#84cc16;border-radius:50%"></i> statek zamilkł w ruchu (doba __GAP_DAY__)</div>
+  <div><i style="background:#e11d48;border-radius:50%"></i> przeładunek burta w burtę (doba __STS_DAY__)</div>
+  <div><i style="background:#f59e0b;border-radius:50%"></i> jeden numer MMSI w dwóch miejscach</div>
+  <div><i style="background:#7f1d1d"></i> okupowane <i style="background:#166534"></i> wyzwolone
+       <i style="background:#78716c"></i> status nieznany</div>
+</div>
+
+<footer>Dane: adsb.lol (ODbL) · OpenStreetMap contributors (ODbL) · Digitraffic · OpenSanctions · GDELT · Kiel Institute · DeepStateMap (linia frontu, użycie niekomercyjne) · podkład OpenFreeMap. Projekt niekomercyjny.</footer>
+
+<script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
+<script>
+const aircraft = __AIRCRAFT__;
+const jamming = __JAMMING__;
+const cables = __CABLES__;
+const ships = __SHIPS__;
+const events = __EVENTS__;
+const donors = __AID__;
+const versions = __VERSIONS__;
+const frontline = __FRONTLINE__;
+const anomalies = __ANOMALIES__;
+const tracks = __TRACKS__;
+const loiters = __LOITERS__;
+const silences = __GAPS__;
+const transfers = __STS__;
+const doubles = __IDENTITY__;
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://tiles.openfreemap.org/styles/positron",
+  center: [24.0, 38.0], zoom: 2.3, attributionControl: false,
+});
+
+const aircraftGeoJSON = {
+  type: "FeatureCollection",
+  features: aircraft.map((a) => ({
+    type: "Feature",
+    properties: {
+      label: [a.flight || a.hex, a.type].filter(Boolean).join(" "),
+      military: a.military ? 1 : 0,
+      colour: a.military ? "#e63946" : "#3f4b5b",
+      alt: a.alt, nac_p: a.nac_p, hex: a.hex,
+    },
+    geometry: { type: "Point", coordinates: [a.lon, a.lat] },
+  })),
+};
+
+function trackLength(path) {
+  let km = 0;
+  for (let i = 1; i < path.length; i++) {
+    const [lon1, lat1] = path[i - 1];
+    const [lon2, lat2] = path[i];
+    const dx = (lon2 - lon1) * 111 * Math.cos((lat1 * Math.PI) / 180);
+    const dy = (lat2 - lat1) * 111;
+    km += Math.sqrt(dx * dx + dy * dy);
+  }
+  return Math.round(km * 10) / 10;
+}
+
+const shipsGeoJSON = {
+  type: "FeatureCollection",
+  features: ships.map((s) => ({
+    type: "Feature",
+    properties: {
+      label: s.name || String(s.mmsi),
+      imo: s.imo, klasa: s.class, cel: s.destination, eta: s.eta, sog: s.sog, cog: s.cog,
+      status: s.nav_status, callsign: s.callsign, draught: s.draught,
+      risk: s.risk, kategoria: s.kategoria, shadow: s.shadow ? 1 : 0, flagged: s.flagged ? 1 : 0,
+      track: tracks[String(s.mmsi)] ? 1 : 0,
+      track_km: tracks[String(s.mmsi)] ? trackLength(tracks[String(s.mmsi)].path) : 0,
+      colour: s.shadow ? "#f97316" : s.flagged ? "#eab308" : "#0ea5e9",
+    },
+    geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+  })),
+};
+
+// Warstwy dodajemy dopiero, gdy mapa sie uspokoi. Przy dodawaniu kilku zrodel GeoJSON w zdarzeniu
+// "load" jedno z nich (akurat statki) bylo po cichu gubione: zrodlo mialo 649 obiektow, kafle
+// raportowaly sie jako zaladowane, a nie renderowal sie ani jeden punkt. Po ponownym dodaniu tej
+// samej nazwy po zaladowaniu mapy renderuje sie poprawnie.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const eventsGeoJSON = {
+  type: "FeatureCollection",
+  features: events.map((e) => ({
+    type: "Feature",
+    properties: {
+      label: [e.actor1, e.actor2].filter(Boolean).join(" → "),
+      kind: e.kind, place: e.place, day: e.day, sources: e.sources, url: e.url,
+      colour: e.conflict ? "#dc2626" : "#22c55e",
+      waga: Math.min(14, 4 + Math.sqrt(e.sources) * 2.5),
+    },
+    geometry: { type: "Point", coordinates: [e.lon, e.lat] },
+  })),
+};
+
+const aidGeoJSON = {
+  type: "FeatureCollection",
+  features: donors.map((d) => ({
+    type: "Feature",
+    properties: {
+      country: d.country, total: d.total_bn, military: d.military_bn,
+      financial: d.financial_bn, humanitarian: d.humanitarian_bn,
+      waga: Math.max(3, Math.min(9, Math.sqrt(d.total_bn) * 1.1)),
+    },
+    geometry: { type: "Point", coordinates: [d.lon, d.lat] },
+  })),
+};
+
+const versionsGeoJSON = {
+  type: "FeatureCollection",
+  features: versions.map((v) => ({
+    type: "Feature",
+    properties: {
+      summary: v.summary, place: v.place, kind: v.kind, gap: v.tone_gap, weak: v.weak ? 1 : 0,
+      opis: v.sides.map((s) => `${s.side}: ${s.articles} art., ton ${s.tone > 0 ? "+" : ""}${s.tone}`).join("<br>"),
+      link: (v.sides[0] && v.sides[0].examples && v.sides[0].examples[0]) || "",
+      waga: Math.min(18, 6 + v.tone_gap),
+    },
+    geometry: { type: "Point", coordinates: [v.lon, v.lat] },
+  })),
+};
+
+const anomaliesGeoJSON = {
+  type: "FeatureCollection",
+  features: anomalies.map((a) => ({
+    type: "Feature",
+    properties: {
+      place: a.place, recent: a.recent, expected: a.expected, times: a.times_over,
+      p: a.p_value, kinds: (a.kinds || []).join(", "),
+      link: (a.examples && a.examples[0]) || "",
+      waga: Math.min(30, 8 + Math.sqrt(a.recent) * 3),
+    },
+    geometry: { type: "Point", coordinates: [a.lon, a.lat] },
+  })),
+};
+
+// Tor dyzurny rysujemy jako kreske wzdluz osi wzorca, dlugosci najdluzszej nogi: od razu widac,
+// w ktora strone samolot chodzil tam i z powrotem, a nie tylko gdzie stal.
+function axisBar(lat, lon, axisDeg, km) {
+  if (axisDeg === null || axisDeg === undefined) return null;
+  const half = Math.max(km, 10) / 2;
+  const rad = (axisDeg * Math.PI) / 180;
+  const dLat = (half * Math.cos(rad)) / 111.0;
+  const dLon = (half * Math.sin(rad)) / (111.0 * Math.cos((lat * Math.PI) / 180));
+  return [[lon - dLon, lat - dLat], [lon + dLon, lat + dLat]];
+}
+
+const loiterProps = (l) => ({
+  label: l.callsign || l.registration || l.hex.toUpperCase(),
+  typ: l.type || "typ nieujawniony", rodzaj: l.kind, wzorzec: l.pattern,
+  minuty: l.minutes, alt: l.alt_ft, noga: l.longest_leg_km, zawroty: l.reversals,
+  prosto: l.straight_share, promien: l.radius_km,
+  od: (l.start || "").slice(11, 16), do: (l.end || "").slice(11, 16),
+});
+
+// Jeden numer, kilka skupisk. Rysujemy kazde skupisko i laczymy je linia - to jest cale zdarzenie.
+const idProps = (c) => ({
+  mmsi: c.mmsi, nazwa: (c.names && c.names[0]) || c.mmsi, typ: c.type,
+  przeskoki: c.alternations, maxkt: c.max_kt, pozycji: c.fixes,
+  skupiska: (c.clusters || []).length, lista: c.listed ? 1 : 0,
+});
+
+const identityGeoJSON = {
+  type: "FeatureCollection",
+  features: doubles.flatMap((c) => (c.clusters || []).map((k) => ({
+    type: "Feature",
+    properties: { ...idProps(c), odcinki: k.segments },
+    geometry: { type: "Point", coordinates: [k.lon, k.lat] },
+  }))),
+};
+
+const identityLinesGeoJSON = {
+  type: "FeatureCollection",
+  features: doubles.filter((c) => (c.clusters || []).length > 1).map((c) => ({
+    type: "Feature", properties: idProps(c),
+    geometry: { type: "LineString", coordinates: c.clusters.map((k) => [k.lon, k.lat]) },
+  })),
+};
+
+const stsGeoJSON = {
+  type: "FeatureCollection",
+  features: transfers.map((e) => ({
+    type: "Feature",
+    properties: {
+      a: e.name_a || e.mmsi_a, b: e.name_b || e.mmsi_b,
+      typ_a: e.type_a, typ_b: e.type_b, minuty: e.minutes,
+      metry: Math.round(e.min_km * 1000), dryf: e.drift_km,
+      od: (e.from || "").slice(11, 16), do: (e.to || "").slice(11, 16),
+      lista: (e.listed_a || e.listed_b) ? 1 : 0,
+      kabel: e.near_line, kabel_km: e.near_line_km,
+      waga: Math.max(6, Math.min(13, 5 + Math.sqrt(e.minutes) / 2)),
+    },
+    geometry: { type: "Point", coordinates: [e.lon, e.lat] },
+  })),
+};
+
+const gapProps = (g) => ({
+  label: g.name || g.mmsi, mmsi: g.mmsi, minuty: g.minutes, km: g.shift_km,
+  wezly: g.implied_kt, swiadkow: g.listeners, przed: g.sog_before,
+  od: (g.from || "").slice(11, 16), do: (g.to || "").slice(11, 16),
+  lista: g.sanctioned ? 1 : 0,
+});
+
+const gapsGeoJSON = {
+  type: "FeatureCollection",
+  features: silences.map((g) => ({
+    type: "Feature", properties: gapProps(g),
+    geometry: { type: "Point", coordinates: [g.lon, g.lat] },
+  })),
+};
+
+// Kreska od miejsca zanikniecia do miejsca powrotu: to jest droga, ktorej nikt nie widzial.
+const gapLinesGeoJSON = {
+  type: "FeatureCollection",
+  features: silences.map((g) => ({
+    type: "Feature", properties: gapProps(g),
+    geometry: { type: "LineString", coordinates: [[g.lon, g.lat], [g.resume_lon, g.resume_lat]] },
+  })),
+};
+
+const loitersGeoJSON = {
+  type: "FeatureCollection",
+  features: loiters.map((l) => ({
+    type: "Feature", properties: loiterProps(l),
+    geometry: { type: "Point", coordinates: [l.lon, l.lat] },
+  })),
+};
+
+const loiterAxesGeoJSON = {
+  type: "FeatureCollection",
+  features: loiters.map((l) => ({ l, bar: axisBar(l.lat, l.lon, l.axis_deg, l.longest_leg_km) }))
+    .filter((r) => r.bar)
+    .map((r) => ({
+      type: "Feature", properties: loiterProps(r.l),
+      geometry: { type: "LineString", coordinates: r.bar },
+    })),
+};
+
+const tracksGeoJSON = {
+  type: "FeatureCollection",
+  features: Object.entries(tracks).map(([mmsi, t]) => ({
+    type: "Feature",
+    properties: { mmsi },
+    geometry: { type: "LineString", coordinates: t.path },
+  })),
+};
+
+const LAYERS = {
+  frontline: {
+    data: () => frontline,
+    probe: "frontline-fill",
+    layers: [
+      { id: "frontline-fill", type: "fill", source: "frontline",
+        paint: { "fill-color": ["get", "colour"], "fill-opacity": 0.35 } },
+      { id: "frontline-line", type: "line", source: "frontline",
+        paint: { "line-color": ["get", "colour"], "line-width": 0.8, "line-opacity": 0.9 } },
+    ],
+  },
+  cables: {
+    data: () => cables,
+    probe: "cables",
+    layers: [
+      { id: "cables", type: "line", source: "cables",
+        paint: { "line-color": ["get", "colour"], "line-width": 1.6, "line-opacity": 0.85 } },
+    ],
+  },
+  jamming: {
+    data: () => jamming,
+    probe: "jamming-fill",
+    layers: [
+      { id: "jamming-fill", type: "fill", source: "jamming",
+        paint: { "fill-color": ["get", "colour"], "fill-opacity": 0.35 } },
+      { id: "jamming-line", type: "line", source: "jamming",
+        paint: { "line-color": ["get", "colour"], "line-width": 1, "line-opacity": 0.7 } },
+    ],
+  },
+  shiptracks: {
+    data: () => tracksGeoJSON,
+    probe: "shiptracks",
+    layers: [
+      { id: "shiptracks", type: "line", source: "shiptracks",
+        paint: { "line-color": "#38bdf8", "line-width": 1.2, "line-opacity": 0.5 } },
+    ],
+  },
+  ships: {
+    data: () => shipsGeoJSON,
+    probe: "ships",
+    layers: [
+      { id: "ships", type: "circle", source: "ships",
+        paint: {
+          "circle-radius": ["case", ["==", ["get", "flagged"], 1], 5.5, 3],
+          "circle-color": ["get", "colour"],
+          "circle-stroke-width": ["case", ["==", ["get", "flagged"], 1], 1.4, 0.5],
+          "circle-stroke-color": "#0d1117",
+        } },
+      { id: "ship-labels", type: "symbol", source: "ships",
+        filter: ["==", ["get", "shadow"], 1],
+        layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 11,
+                  "text-offset": [0, 1.2], "text-anchor": "top" },
+        paint: { "text-color": "#fdba74", "text-halo-color": "#0d1117", "text-halo-width": 1.2 } },
+    ],
+  },
+  aid: {
+    data: () => aidGeoJSON,
+    probe: "aid",
+    layers: [
+      // Male, wypelnione znaczniki: wielkie obrecze zjadaly mape i mylily sie z zasiegiem czegokolwiek.
+      { id: "aid", type: "circle", source: "aid",
+        paint: {
+          "circle-radius": ["get", "waga"],
+          "circle-color": "#3b82f6",
+          "circle-opacity": 0.9,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#dbeafe",
+        } },
+    ],
+  },
+  events: {
+    data: () => eventsGeoJSON,
+    probe: "events",
+    layers: [
+      { id: "events", type: "circle", source: "events",
+        paint: {
+          "circle-radius": ["get", "waga"],
+          "circle-color": ["get", "colour"],
+          "circle-opacity": 0.45,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": ["get", "colour"],
+        } },
+    ],
+  },
+  identitylines: {
+    data: () => identityLinesGeoJSON,
+    probe: "identity-lines",
+    layers: [
+      { id: "identity-lines", type: "line", source: "identitylines",
+        paint: { "line-color": "#f59e0b", "line-width": 2, "line-dasharray": [1, 1.5], "line-opacity": 0.9 } },
+    ],
+  },
+  identity: {
+    data: () => identityGeoJSON,
+    probe: "identity",
+    layers: [
+      { id: "identity", type: "circle", source: "identity",
+        paint: {
+          "circle-radius": 7,
+          "circle-color": "#f59e0b",
+          "circle-opacity": 0.5,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#78350f",
+        } },
+    ],
+  },
+  sts: {
+    data: () => stsGeoJSON,
+    probe: "sts",
+    layers: [
+      { id: "sts", type: "circle", source: "sts",
+        paint: {
+          "circle-radius": ["get", "waga"],
+          "circle-color": "#e11d48",
+          "circle-opacity": 0.25,
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": "#e11d48",
+        } },
+    ],
+  },
+  gaplines: {
+    data: () => gapLinesGeoJSON,
+    probe: "gap-lines",
+    layers: [
+      { id: "gap-lines", type: "line", source: "gaplines",
+        paint: { "line-color": "#84cc16", "line-width": 2, "line-dasharray": [2, 2], "line-opacity": 0.9 } },
+    ],
+  },
+  gaps: {
+    data: () => gapsGeoJSON,
+    probe: "gaps",
+    layers: [
+      { id: "gaps", type: "circle", source: "gaps",
+        paint: {
+          "circle-radius": 7,
+          "circle-color": ["case", ["==", ["get", "lista"], 1], "#f97316", "#84cc16"],
+          "circle-opacity": 0.9,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+        } },
+    ],
+  },
+  loiters: {
+    data: () => loitersGeoJSON,
+    probe: "loiters",
+    layers: [
+      { id: "loiters", type: "circle", source: "loiters",
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#14b8a6",
+          "circle-opacity": 0.85,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+        } },
+    ],
+  },
+  loiteraxes: {
+    data: () => loiterAxesGeoJSON,
+    probe: "loiter-axes",
+    layers: [
+      { id: "loiter-axes", type: "line", source: "loiteraxes",
+        paint: { "line-color": "#14b8a6", "line-width": 2.5, "line-opacity": 0.7 } },
+    ],
+  },
+  anomalies: {
+    data: () => anomaliesGeoJSON,
+    probe: "anomalies",
+    layers: [
+      { id: "anomalies", type: "circle", source: "anomalies",
+        paint: {
+          "circle-radius": ["get", "waga"],
+          "circle-color": "#f43f5e",
+          "circle-opacity": 0.12,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#f43f5e",
+        } },
+    ],
+  },
+  versions: {
+    data: () => versionsGeoJSON,
+    probe: "versions",
+    layers: [
+      { id: "versions", type: "circle", source: "versions",
+        paint: {
+          "circle-radius": ["get", "waga"],
+          "circle-color": "#a855f7",
+          "circle-opacity": 0.2,
+          "circle-stroke-width": ["case", ["==", ["get", "weak"], 1], 1, 2.2],
+          "circle-stroke-color": "#a855f7",
+        } },
+    ],
+  },
+  aircraft: {
+    data: () => aircraftGeoJSON,
+    probe: "aircraft",
+    layers: [
+      { id: "aircraft", type: "circle", source: "aircraft",
+        paint: {
+          "circle-radius": ["case", ["==", ["get", "military"], 1], 6, 3.5],
+          "circle-color": ["get", "colour"],
+          "circle-stroke-width": ["case", ["==", ["get", "military"], 1], 1.5, 0.6],
+          "circle-stroke-color": "#f8fafc",
+        } },
+      { id: "aircraft-labels", type: "symbol", source: "aircraft",
+        filter: ["==", ["get", "military"], 1],
+        layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 11,
+                  "text-offset": [0, -1.1], "text-anchor": "bottom" },
+        paint: { "text-color": "#f0f0f0", "text-halo-color": "#0d1117", "text-halo-width": 1.2 } },
+    ],
+  },
+};
+
+/**
+ * Adds one GeoJSON source with its layers and checks that something was actually painted.
+ *
+ * Measured failure: adding several GeoJSON sources in one go silently loses one of them. The source
+ * reported 649 features and "tiles loaded", yet not a single point rendered; removing it and adding
+ * it again under the same name fixed it. So each source goes in on its own, and if it painted
+ * nothing while holding data, it is added again.
+ */
+async function addGroup(id, spec, attempt = 1) {
+  const data = spec.data();
+  if (!data.features.length) return;
+
+  map.addSource(id, { type: "geojson", data });
+  for (const layer of spec.layers) map.addLayer(layer);
+  await sleep(1500);
+
+  const painted = map.queryRenderedFeatures({ layers: [spec.probe] }).length;
+  (window.__log ||= []).push({ id, attempt, painted, features: data.features.length });
+  if (painted === 0 && attempt < 4) {
+    for (const layer of spec.layers) map.removeLayer(layer.id);
+    map.removeSource(id);
+    await sleep(1200);
+    return addGroup(id, spec, attempt + 1);
+  }
+}
+
+async function buildLayers() {
+  for (const [id, spec] of Object.entries(LAYERS)) {
+    await addGroup(id, spec);
+  }
+
+  for (const layer of ["aircraft", "ships", "cables", "jamming-fill", "events", "aid", "versions", "frontline-fill", "anomalies", "loiters", "loiter-axes", "gaps", "gap-lines", "sts", "identity", "identity-lines"]) {
+    map.on("click", layer, (e) => {
+      const p = e.features[0].properties;
+      const html = layer === "aircraft"
+        ? `<b>${p.label}</b><br>${p.alt ?? "?"} ft · NACp ${p.nac_p ?? "?"}<br>${p.hex}`
+        : layer === "ships"
+          ? `<b>${p.label}</b><br>${p.klasa}${p.imo ? " · IMO " + p.imo : ""}` +
+            `${p.callsign ? " · " + p.callsign : ""}<br>` +
+            `<b>dokąd:</b> ${p.cel ? p.cel : "nie zadeklarowano"}${p.eta ? ` (ETA ${p.eta})` : ""}<br>` +
+            `<b>skąd:</b> ${p.track ? `obserwowana trasa __TRACK_FROM__–__TRACK_TO__ UTC, ${p.track_km} km` : "brak obserwacji w tym oknie"}<br>` +
+            `${p.sog ?? "?"} w. · kurs ${p.cog ?? "?"}° · ${p.status}` +
+            `${p.draught ? " · zanurzenie " + p.draught + " m" : ""}<br>` +
+            `<span class="muted">cel i ETA wpisuje załoga ręcznie — bywają nieaktualne</span>` +
+            (p.kategoria ? `<br><span style="color:#fdba74">rodzaj wykazu: ${p.kategoria}</span>` +
+                      (p.risk ? `<br>oznaczenia: ${p.risk}` : "") +
+                      `<br><span class="muted">inspekcja portowa mówi o stanie technicznym statku, ` +
+                      `nie o tym, czyj wozi ładunek — to nie to samo co sankcje</span>` +
+                      `<br><span class="muted">dopasowanie po numerze — do sprawdzenia, nie wyrok</span>` : "")
+        : layer === "identity" || layer === "identity-lines"
+          ? `<b>${p.nazwa}</b><br>MMSI ${p.mmsi}${p.typ ? " · " + p.typ : ""}<br>` +
+            `<b>jeden numer, ${p.skupiska} oddalone skupiska</b> (doba __ID_DAY__)<br>` +
+            `tor przeskakiwał między nimi ${p.przeskoki} razy — najszybszy przeskok ${p.maxkt} w.<br>` +
+            `${p.pozycji} pozycji w dobie<br>` +
+            `<span class="muted">numer MMSI to nie statek, tylko liczba wpisana do radia. ` +
+            `Tak wygląda podszywanie się, ale tak samo wygląda odbiornik mylący cudzy numer</span>`
+        : layer === "sts"
+          ? `<b>${p.a}</b> + <b>${p.b}</b><br>${p.typ_a} · ${p.typ_b}<br>` +
+            `<b>burta w burtę ${p.minuty} min</b> (${p.od}–${p.do} UTC, __STS_DAY__)<br>` +
+            `najbliżej ${p.metry} m · para przesunęła się ${p.dryf} km<br>` +
+            (p.kabel ? `${p.kabel_km} km od: ${p.kabel}<br>` : "") +
+            (p.lista ? `<span style="color:#fdba74">jeden z nich jest w wykazach — kliknij statek, ` +
+                       `żeby sprawdzić, czy to sankcje czy inspekcja</span><br>` : "") +
+            `<span class="muted">większość takich spotkań to legalne bunkrowanie paliwa — ` +
+            `Skagen jest głównym miejscem w Europie, gdzie się to robi</span>`
+        : layer === "gaps" || layer === "gap-lines"
+          ? `<b>${p.label}</b><br>MMSI ${p.mmsi}<br>` +
+            `<b>cisza AIS przez ${p.minuty} min</b> (${p.od}–${p.do} UTC, __GAP_DAY__)<br>` +
+            `pojawił się ${p.km} km dalej — musiał płynąć ${p.wezly} w.<br>` +
+            `w tym czasie w tej samej kratce słychać było <b>${p.swiadkow}</b> innych statków<br>` +
+            (p.lista ? `<span style="color:#fdba74">jest na liście sankcji/ryzyka</span><br>` : "") +
+            `<span class="muted">odbiór działał, więc cisza należy do statku — ale awaria ` +
+            `transpondera wygląda tak samo jak wyłączenie go</span>`
+        : layer === "loiters" || layer === "loiter-axes"
+          ? `<b>${p.label}</b><br>${p.typ} · ${p.rodzaj}<br>` +
+            `<b>${p.wzorzec}</b> przez ${p.minuty} min (${p.od}–${p.do} UTC)<br>` +
+            `noga ${p.noga} km · ${p.zawroty} zawrotów · ${Math.round(p.prosto * 100)}% drogi prosto<br>` +
+            `${p.alt ? p.alt + " ft · " : ""}wzorzec mieści się w promieniu ${p.promien} km<br>` +
+            `<span class="muted">to kształt toru, nie misja — tak lata tankowiec na dyżurze, ` +
+            `ale też rozpoznanie i samolot czekający na lotnisko</span>`
+        : layer === "anomalies"
+          ? `<b>Nietypowe skupisko doniesień</b><br>${p.place ?? "?"}<br>` +
+            `${p.recent} zdarzeń w oknie, spodziewane ${p.expected} (×${p.times})<br>` +
+            `prawdopodobieństwo przypadku: ${Number(p.p).toExponential(1)}<br>${p.kinds}<br>` +
+            `<span style="color:#8b949e">to skupisko DONIESIEŃ, nie potwierdzonych zdarzeń</span>` +
+            (p.link ? `<br><a href="${p.link}" target="_blank" style="color:#7dd3fc">przykładowy artykuł</a>` : "")
+        : layer === "versions"
+          ? `<b>${p.summary}</b><br>${p.place ?? "?"} · ${p.kind}<br><br>` +
+            `<span style="color:#d8b4fe">jak opisały to strony:</span><br>${p.opis}<br>` +
+            `<b>różnica wydźwięku: ${p.gap}</b>${p.weak ? " (cienka podstawa: strona z jednym artykułem)" : ""}<br>` +
+            `<span style="color:#8b949e">ton to cecha tekstu, nie dowód, kto ma rację</span>` +
+            (p.link ? `<br><a href="${p.link}" target="_blank" style="color:#7dd3fc">przykładowy artykuł</a>` : "")
+        : layer === "frontline-fill"
+          ? `<b>${p.label}</b><br>${p.name ?? ""}<br><span style="color:#8b949e">DeepStateMap, stan z podpisu mapy</span>`
+        : layer === "aid"
+          ? `<b>${p.country}</b><br>przekazane razem: ${p.total} mld $<br>` +
+            `wojskowe ${p.military} · finansowe ${p.financial} · humanitarne ${p.humanitarian} mld $<br>` +
+            `<span style="color:#8b949e">Kiel Institute, wartosci przekazane (nie obiecane)</span>`
+        : layer === "events"
+          ? `<b>${p.label}</b><br>${p.kind}<br>${p.place ?? "?"} · ${p.day}<br>` +
+            `opisane w ${p.sources} doniesieniach` +
+            (p.url ? `<br><a href="${p.url}" target="_blank" style="color:#7dd3fc">źródło</a>` : "")
+        : layer === "cables"
+          ? `<b>${p.name}</b><br>${p.kind}${p.operator ? " · " + p.operator : ""}`
+          : `<b>Zakłócenia GPS</b><br>${p.degraded} z ${p.aircraft} samolotów (${Math.round(p.pct * 100)}%)`;
+      new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map);
+    });
+    map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
+  }
+
+  // Kontrola: warstwa, ktora nic nie namalowala, to blad - nie chcemy tego zauwazyc dopiero na zrzucie.
+  setTimeout(() => {
+    window.__counts = {};
+    for (const id of ["cables", "jamming-fill", "ships", "shiptracks", "aircraft", "events", "aid", "versions", "frontline-fill", "anomalies", "loiters", "loiter-axes", "gaps", "gap-lines", "sts", "identity", "identity-lines"]) {
+      window.__counts[id] = map.getLayer(id) ? map.queryRenderedFeatures({ layers: [id] }).length : -1;
+    }
+    const tabela = document.getElementById("wsparcie-lista");
+  if (tabela) {
+    tabela.innerHTML = donors.slice(0, 8)
+      .map((d) => `<tr><td>${d.country}</td><td class="kwota">${d.total_bn.toFixed(0)}</td></tr>`)
+      .join("");
+  }
+
+  window.map = map;            // dostep dla testow Playwright: klikniecia i zrzuty z konkretnego miejsca
+  window.mapReady = true;
+  }, 2500);
+}
+
+map.once("idle", buildLayers);
+</script>
+</body>
+</html>

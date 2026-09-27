@@ -1,0 +1,4 @@
+# Jedno zakonczenie linii w repo, niezaleznie od systemu (git ostrzegal o CRLF przy dodawaniu plikow)
+* text=auto eol=lf
+*.png binary
+*.ps1 text eol=crlf

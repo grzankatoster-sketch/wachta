@@ -1,0 +1,39 @@
+{
+  "d3": {
+    "precision": 0.6,
+    "recall": 0.75
+  },
+  "d1_synthetic": {
+    "precision": 1.0,
+    "recall": 1.0
+  },
+  "regresja": {
+    "d4_gaps": {
+      "found": 2,
+      "mmsi": [
+        "273258520",
+        "273335920"
+      ]
+    },
+    "d5_sts": {
+      "offshore": 5,
+      "cargo_pairs": 2,
+      "pairs": [
+        "249393000+265002000",
+        "265012140+352003136"
+      ]
+    },
+    "d7_identity": {
+      "two_hulls": 1,
+      "mmsi": [
+        "219006091"
+      ]
+    },
+    "d2_synthetic": {
+      "patterns": 1,
+      "kinds": [
+        "tor wyscigowy"
+      ]
+    }
+  }
+}

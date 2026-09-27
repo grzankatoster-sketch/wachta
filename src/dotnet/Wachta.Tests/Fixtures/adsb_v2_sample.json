@@ -1,0 +1,13 @@
+{
+  "now": 1790078400000,
+  "ac": [
+    { "hex": "43C6F1", "flight": "RRR2302 ", "t": "A332", "dbFlags": 1, "lat": 54.9, "lon": 19.8, "seen": 0.3,
+      "alt_baro": 27000, "gs": 410.5, "track": 92.1, "nic": 8, "nac_p": 9, "seen_pos": 1.2 },
+    { "hex": "48ad01", "flight": "LOT3AB  ", "t": "B38M", "dbFlags": 0, "lat": 54.37, "lon": 18.47,
+      "alt_baro": "ground", "gs": 12.0, "track": 290.0, "nic": 8, "nac_p": 10, "seen_pos": 0.4 },
+    { "hex": "4b1815", "flight": "", "t": "A320", "lat": 55.2, "lon": 20.4,
+      "alt_baro": 36000, "gs": 450, "track": 45, "nic": 0, "nac_p": 0, "seen_pos": 95.0 },
+    { "hex": "4ca7b2", "flight": "RYR1XY", "t": "B738", "alt_baro": 38000, "seen": 3.0 },
+    { "hex": "ae1234", "t": "K35R", "lat": 55.5, "lon": 17.0, "alt_baro": 24000.0, "seen_pos": 0 }
+  ]
+}

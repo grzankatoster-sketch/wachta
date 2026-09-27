@@ -1,0 +1,11 @@
+  - stage: Eval
+    dependsOn: Test
+    jobs:
+      - job: eval
+        steps:
+          - script: curl -LsSf https://astral.sh/uv/install.sh | sh
+            displayName: install uv
+          - script: |
+              export PATH="$HOME/.local/bin:$PATH"
+              uv run --project src/python python eval/run_eval.py --check eval/baseline.json
+            displayName: detector eval gate

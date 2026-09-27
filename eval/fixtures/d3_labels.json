@@ -1,0 +1,43 @@
+{
+  "source": "gpsjam.org 2026-09-25 (H3 res 4, count_good_aircraft / count_bad_aircraft)",
+  "note": "Referencja z dnia poprzedniego i z calej doby, nasz pomiar to jedna godzina - zgodnosc jest z natury czesciowa, wiec recall liczony w ten sposob jest zanizony.",
+  "thresholds": {
+    "min_reference_aircraft": 20,
+    "positive_share": 0.1,
+    "negative_share": 0.01
+  },
+  "positive": [
+    "8411269ffffffff",
+    "841126dffffffff",
+    "841e2d1ffffffff",
+    "841f099ffffffff",
+    "841f445ffffffff",
+    "841f449ffffffff",
+    "841f46bffffffff",
+    "841f623ffffffff"
+  ],
+  "negative": [
+    "8408863ffffffff",
+    "8408865ffffffff",
+    "840886bffffffff",
+    "8408959ffffffff",
+    "840895bffffffff",
+    "8408b35ffffffff",
+    "8408b37ffffffff",
+    "841e20dffffffff",
+    "841e247ffffffff",
+    "841e2c9ffffffff",
+    "841e2e9ffffffff",
+    "841f019ffffffff",
+    "841f033ffffffff",
+    "841f051ffffffff",
+    "841f057ffffffff",
+    "841f059ffffffff",
+    "841f1d9ffffffff",
+    "841f2b9ffffffff",
+    "841f2bdffffffff",
+    "841f2e5ffffffff",
+    "841f523ffffffff",
+    "841f535ffffffff"
+  ]
+}
