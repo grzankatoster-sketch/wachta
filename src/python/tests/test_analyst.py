@@ -175,3 +175,34 @@ def test_different_sentences_citing_the_same_fact_both_stay():
     nota = "Statek milczal 46 minut [3]. Pojawil sie 16,3 km dalej [3]."
     przyjete, odrzucone = review(nota, FAKTY)
     assert len(przyjete) == 2 and odrzucone == []
+
+
+def test_a_citation_range_is_bounded_before_it_is_expanded():
+    """Znalezione przez Codeksa 2026-09-28: `[1-99999999]` rozwijalo sie do zbioru stu milionow.
+
+    Model nie musi byc zlosliwy, zeby to napisac - wystarczy, ze sie pomyli. Mutacja: usuniecie
+    progu MAX_ODNOSNIKOW zawiesza ten test zamiast go oblac, wiec jest limit czasu.
+    """
+    import time
+
+    from wachta_detectors.analyst import _cited_numbers
+
+    start = time.monotonic()
+    got = _cited_numbers("Cos sie stalo [1-99999999].")
+    assert time.monotonic() - start < 1.0, "rozwijanie zakresu nie moze zalezec od jego szerokosci"
+    assert got == {1, 99999999}
+
+
+def test_a_sentence_with_an_impossible_range_is_still_rejected():
+    """Ograniczenie zakresu nie moze przepuscic zdania, ktore wczesniej by przepadlo."""
+    from wachta_detectors.analyst import Fact, judge
+
+    fakty = [Fact(number=1, text="statek zamilkl na 46 minut", source="D4")]
+    werdykt = judge("Statek zamilkl na 46 minut [1-99999999].", fakty)
+    assert not werdykt.accepted
+
+
+def test_a_normal_range_still_expands():
+    from wachta_detectors.analyst import _cited_numbers
+
+    assert _cited_numbers("Tak wynika z [2-5].") == {2, 3, 4, 5}

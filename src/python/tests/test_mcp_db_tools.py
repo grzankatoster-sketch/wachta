@@ -135,7 +135,7 @@ def test_server_starts_without_a_database_at_all():
 def test_server_starts_when_the_database_is_unreachable():
     # Port 1 nikt nie slucha - polaczenie odpada od razu, a serwer ma i tak wstac.
     box = build_from_env(FIXTURES, {"WACHTA_MCP_NO_SEARCH": "1",
-                                    "WACHTA_DB": "postgresql://postgres:x@127.0.0.1:1/wachta"})
+                                    "WACHTA_DB": "postgresql://postgres:XXXX@127.0.0.1:1/wachta"})
     assert not NARZEDZIA_BAZY & set(box.names())
     assert "ciche_statki" in box.names()
 

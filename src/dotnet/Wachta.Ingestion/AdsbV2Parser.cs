@@ -8,6 +8,9 @@ public static class AdsbV2Parser
 {
     private const int MilitaryDbFlag = 1;
 
+    /// <summary>How far the source clock may differ from ours before we stop believing it.</summary>
+    public static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
+
     public static ParseResult Parse(
         string json, DateTimeOffset fetchedAt, bool forceMilitary = false, double maxPositionAgeSeconds = 30)
     {
@@ -20,13 +23,32 @@ public static class AdsbV2Parser
         }
 
         // Source clock: the same payload fetched twice must produce identical timestamps.
-        var sourceNow = GetDouble(doc.RootElement, "now") is { } nowMs
-            ? DateTimeOffset.FromUnixTimeMilliseconds((long)nowMs)
-            : fetchedAt;
+        //
+        // Trusted only while it stays near ours. Everything downstream is measured FROM this instant,
+        // so a "now" in the year 5000 backdates nothing and postdates everything: the freshness check
+        // below (fetchedAt - fixedAt) goes negative and passes, aircraft_contact records a maximum no
+        // later report can beat, and D1 - which calls an aircraft dark when its last message is old
+        // enough - stops firing. An out-of-range value would also throw straight out of
+        // FromUnixTimeMilliseconds and cost the whole batch. Beyond the tolerance we keep our own
+        // clock: timestamps then differ between two fetches of one payload, which is a smaller price.
+        // Zgloszone przez Codeksa 2026-09-28 (AdsbV2Parser.cs:43), potwierdzone na kodzie.
+        var sourceNow = fetchedAt;
+        if (GetDouble(doc.RootElement, "now") is { } nowMs
+            && nowMs is > -62135596800000d and < 253402300799999d)
+        {
+            var reported = DateTimeOffset.FromUnixTimeMilliseconds((long)nowMs);
+            if ((reported - fetchedAt).Duration() <= MaxClockSkew)
+            {
+                sourceNow = reported;
+            }
+        }
 
         foreach (var a in ac.EnumerateArray())
         {
-            if (!a.TryGetProperty("hex", out var hexEl) || hexEl.GetString() is not { Length: > 0 } rawHex)
+            // Przez GetString, a nie hexEl.GetString(): pomocnik sprawdza rodzaj wartosci, a goly
+            // odczyt rzuca InvalidOperationException, gdy "hex" przyjdzie jako liczba albo null -
+            // i jeden taki rekord w paczce kasowal wszystkie pozostale, tez poprawne.
+            if (GetString(a, "hex") is not { Length: > 0 } rawHex)
             {
                 continue;
             }
@@ -34,12 +56,13 @@ public static class AdsbV2Parser
             var hex = rawHex.Trim().ToLowerInvariant();
             var lat = GetDouble(a, "lat");
             var lon = GetDouble(a, "lon");
-            var seenPos = GetDouble(a, "seen_pos");
+            // Wiek nie bywa ujemny. Ujemny "seen_pos" przesuwalby pozycje w przyszlosc.
+            var seenPos = GetDouble(a, "seen_pos") is { } sp ? Math.Max(0, sp) : (double?)null;
             var hasPosition = lat is not null && lon is not null;
             var positionTime = hasPosition ? sourceNow.AddSeconds(-(seenPos ?? 0)) : (DateTimeOffset?)null;
 
             // "seen" = age of the last message of any kind; without it fall back to the position age.
-            var seenMessage = GetDouble(a, "seen") ?? seenPos ?? 0;
+            var seenMessage = Math.Max(0, GetDouble(a, "seen") ?? seenPos ?? 0);
             contacts.Add(new AircraftContact(hex, sourceNow.AddSeconds(-seenMessage), positionTime));
 
             // Rozpakowane wzorcem, a nie przez ".Value" po osobnym bool-u: kompilator nie wiaze

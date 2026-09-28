@@ -81,13 +81,34 @@ def split_sentences(note: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", note or "") if s.strip()]
 
 
+# Nikt nie poda modelowi tysiaca faktow, a zdanie odwolujace sie do tysiaca i tak nie mowi nic.
+# Gorna granica jest tu po to, zeby zakres nie mogl urosnac poza to, co ma sens.
+MAX_ODNOSNIKOW = 1000
+
+
 def _cited_numbers(sentence: str) -> set[int]:
-    """Every fact number a sentence points at, whether written singly, as a list or as a range."""
+    """Every fact number a sentence points at, whether written singly, as a list or as a range.
+
+    The range is bounded before it is expanded, not after. `range(a, b)` costs nothing until a set
+    swallows it, and the ends come from whatever the model wrote: one hallucinated "[1-99999999]" -
+    no ill will needed, models produce such things - and this call allocates a hundred million ints
+    and takes the analyst down with it. A citation wider than the fact list cannot be satisfied
+    anyway, so nothing is lost by refusing to count it: judge() sees numbers that do not exist among
+    the facts and rejects the sentence, which is the right outcome for a citation like that.
+
+    Znalezione przez Codeksa w audycie 2026-09-28 i potwierdzone na kodzie.
+    """
     out: set[int] = set()
     for group in ODNOSNIK.findall(sentence):
         if "-" in group:
             first, last = (int(x) for x in group.split("-", 1))
-            out.update(range(min(first, last), max(first, last) + 1))
+            low, high = min(first, last), max(first, last)
+            if high - low >= MAX_ODNOSNIKOW:
+                # Zakres szerszy niz jakakolwiek lista faktow: zapisujemy same konce, zeby zdanie
+                # dalej zostalo odrzucone za odnosnik do nieistniejacego faktu, a nie rozwijamy go.
+                out.update((low, high))
+                continue
+            out.update(range(low, high + 1))
         else:
             out.update(int(x) for x in group.split(","))
     return out

@@ -43,7 +43,7 @@ public static class SearchEndpoints
     public static void MapSearchEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/search", async (NpgsqlDataSource db, IHttpClientFactory httpFactory,
-                                         IConfiguration config, string q, string? kind,
+                                         IConfiguration config, ILoggerFactory logs, string q, string? kind,
                                          int? limit, double? minScore, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(q))
@@ -63,8 +63,13 @@ public static class SearchEndpoints
             {
                 // Bez modelu nie ma jak zamienic pytania na wektor. To nie jest blad zapytania i nie
                 // jest to pusty wynik - te dwie rzeczy znaczylyby, ze w korpusie nic nie ma.
+                // Bez e.Message: tresc wyjatku niesie adres i port wewnetrznego modelu ("Connection
+                // refused (host.docker.internal:11434)"), a to jest odpowiedz dla anonimowego klienta.
+                // Nazwa modelu zostaje - mowi czytelnikowi, czego brakuje, i nie jest adresem.
+                // Zgloszone przez Codeksa 2026-09-28 (SearchEndpoints.cs:67).
+                logs.CreateLogger("Wachta.Api.Search").LogWarning(e, "Embedding model {Model} unreachable", EmbedModel);
                 return Results.Problem(
-                    detail: $"Model osadzen ({EmbedModel}) nie odpowiada: {e.Message}",
+                    detail: $"Model osadzen ({EmbedModel}) nie odpowiada. Wyszukiwanie po znaczeniu jest chwilowo niedostepne.",
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 

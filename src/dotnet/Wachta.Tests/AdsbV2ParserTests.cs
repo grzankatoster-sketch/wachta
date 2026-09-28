@@ -85,6 +85,57 @@ public sealed class AdsbV2ParserTests
         Assert.Empty(AdsbV2Parser.Parse("{\"now\":1790078400000,\"ac\":[]}", FetchedAt).Contacts);
     }
 
+    [Fact]
+    public void One_record_with_a_hex_that_is_not_a_string_does_not_cost_the_whole_batch()
+    {
+        // hexEl.GetString() rzuca na liczbie, a wyjatek leci przez cala petle: jeden wadliwy rekord
+        // zabieral ze soba kazdy poprawny w tej samej paczce, czyli cala minute obserwacji.
+        // Zgloszone przez Codeksa 2026-09-28, potwierdzone na kodzie.
+        var json = """
+            {"now":1790078400000,"ac":[
+              {"hex":4849152,"lat":55.0,"lon":19.0,"seen_pos":1},
+              {"hex":"3c6444","lat":55.1,"lon":19.1,"seen_pos":1}]}
+            """;
+
+        var wynik = AdsbV2Parser.Parse(json, FetchedAt);
+
+        Assert.Single(wynik.Aircraft);
+        Assert.Equal("3c6444", wynik.Aircraft[0].Hex);
+    }
+
+    [Fact]
+    public void A_negative_age_does_not_place_an_aircraft_in_the_future()
+    {
+        // Ujemne "seen"/"seen_pos" cofalo odejmowanie: pozycja dostawala czas pozniejszy niz moment
+        // odbioru, kontrola swiezosci (fetchedAt - fixedAt) wychodzila ujemna i przechodzila, a w
+        // aircraft_contact zostawal szczyt, ktorego zaden pozniejszy poprawny raport juz nie pobije.
+        var json = """
+            {"now":1790078400000,"ac":[{"hex":"3c6444","lat":55.0,"lon":19.0,"seen":-86400,"seen_pos":-86400}]}
+            """;
+
+        var wynik = AdsbV2Parser.Parse(json, FetchedAt);
+
+        Assert.All(wynik.Contacts, c => Assert.True(c.LastMessageAt <= FetchedAt,
+            $"kontakt z przyszlosci: {c.LastMessageAt:o} > {FetchedAt:o}"));
+        Assert.All(wynik.Aircraft, a => Assert.True(a.Timestamp <= FetchedAt, "pozycja z przyszlosci"));
+    }
+
+    [Fact]
+    public void A_source_clock_far_from_ours_is_not_believed()
+    {
+        // "now" w roku 5000 postarza wszystko wzgledem siebie i wycisza D1. Poza tolerancja
+        // zostajemy przy wlasnym zegarze - dwa pobrania tej samej paczki daja wtedy rozne czasy,
+        // i to jest tansze niz detektor, ktory przestaje strzelac.
+        var json = """
+            {"now":95617584000000,"ac":[{"hex":"3c6444","lat":55.0,"lon":19.0,"seen_pos":1}]}
+            """;
+
+        var wynik = AdsbV2Parser.Parse(json, FetchedAt);
+
+        var kontakt = Assert.Single(wynik.Contacts);
+        Assert.True((kontakt.LastMessageAt - FetchedAt).Duration() <= AdsbV2Parser.MaxClockSkew);
+    }
+
     [Theory]
     [InlineData("@@@@@@@@", null)]                 // samolot nie podaje znaku - same znaki wypelniajace
     [InlineData("ZLY41 @@", "ZLY41")]              // znak podany, reszta pola wypelniona
