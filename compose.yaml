@@ -30,7 +30,9 @@ services:
   api:
     build: { context: ., dockerfile: infra/docker/dotnet.Dockerfile, args: { PROJECT: Wachta.Api } }
     environment: *db-env
-    ports: ["8080:8080"]
+    # Port na hoscie zmienisz przez WACHTA_API_PORT w .env, bez edycji tego pliku.
+    # Wewnatrz sieci compose API zawsze nasluchuje na 8080 (tak kieruje nginx w web).
+    ports: ["${WACHTA_API_PORT:-8080}:8080"]
     restart: unless-stopped
     depends_on: { migrator: { condition: service_completed_successfully } }
 
@@ -43,7 +45,8 @@ services:
 
   web:
     build: { context: ., dockerfile: infra/docker/web.Dockerfile }
-    ports: ["8081:80"]
+    # Port na hoscie zmienisz przez WACHTA_WEB_PORT w .env; 8081 bywa zajete przez inne narzedzia.
+    ports: ["${WACHTA_WEB_PORT:-8081}:80"]
     depends_on: [api]
 
 volumes:

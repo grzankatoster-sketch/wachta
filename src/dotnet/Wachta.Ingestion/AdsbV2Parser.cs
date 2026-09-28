@@ -56,7 +56,7 @@ public static class AdsbV2Parser
                 && alt.ValueKind == JsonValueKind.String
                 && alt.GetString() == "ground";
             int? altFt = alt.ValueKind == JsonValueKind.Number ? (int)Math.Round(alt.GetDouble()) : null;
-            var flight = GetString(a, "flight")?.Trim();
+            var flight = CleanCallsign(GetString(a, "flight"));
 
             result.Add(new AircraftObservation(
                 Hex: hex,
@@ -75,6 +75,18 @@ public static class AdsbV2Parser
         }
 
         return new ParseResult(result, contacts);
+    }
+
+    /// <summary>Strips the Mode-S padding from a callsign, and drops one made of nothing else.
+    ///
+    /// The callsign field is eight fixed characters and an aircraft that declares none fills them
+    /// with '@'. Trimming only whitespace let "@@@@@@@@" and "ZLY41 @@" reach the database and the
+    /// map, where they read as identifiers rather than as absence. Found by looking at what the
+    /// live pipeline actually stored, not by a test.</summary>
+    public static string? CleanCallsign(string? raw)
+    {
+        var cleaned = raw?.Replace('@', ' ').Trim();
+        return string.IsNullOrEmpty(cleaned) ? null : cleaned;
     }
 
     private static double? GetDouble(JsonElement e, string name) =>

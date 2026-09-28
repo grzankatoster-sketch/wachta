@@ -84,4 +84,17 @@ public sealed class AdsbV2ParserTests
         Assert.Empty(AdsbV2Parser.Parse("{\"now\":1790078400000}", FetchedAt).Aircraft);
         Assert.Empty(AdsbV2Parser.Parse("{\"now\":1790078400000,\"ac\":[]}", FetchedAt).Contacts);
     }
+
+    [Theory]
+    [InlineData("@@@@@@@@", null)]                 // samolot nie podaje znaku - same znaki wypelniajace
+    [InlineData("ZLY41 @@", "ZLY41")]              // znak podany, reszta pola wypelniona
+    [InlineData("  RRR2116  ", "RRR2116")]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void Padding_characters_are_not_a_callsign(string? raw, string? expected)
+    {
+        // Znalezione w bazie po pierwszym uruchomieniu na zywo: "@@@@@@@@" trafialo na mape jako
+        // identyfikator. W kodowaniu Mode-S "@" to wypelniacz, czyli BRAK znaku wywolawczego.
+        Assert.Equal(expected, AdsbV2Parser.CleanCallsign(raw));
+    }
 }
