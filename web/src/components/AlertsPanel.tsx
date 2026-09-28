@@ -1,14 +1,34 @@
+import { useState } from "react";
 import { parseEvidence } from "../api";
 import type { AlertDto } from "../api";
 import { dopisek, NAZWY, podmiot, szczegoly } from "../alert-text";
+import { grupy, odfiltruj, pustaLista } from "../filtr-alarmow";
 
 export function AlertsPanel({ alerts, onSelect }: { alerts: AlertDto[]; onSelect: (a: AlertDto) => void }) {
+  const [detektor, setDetektor] = useState<string | null>(null);
+  const widoczne = odfiltruj(alerts, detektor);
+
   return (
     <aside className="panel">
       <h2>Alarmy (do sprawdzenia)</h2>
-      {alerts.length === 0 && <p className="muted">Brak alarmów z ostatnich 24 h.</p>}
+      {/* Detektory nie produkuja w zblizonym tempie: D5 daje okolo stu dziennie, D4 kilka, D7 zwykle
+          zero. Bez filtra lista jest wyjsciem jednego detektora, a rzadkie znalezisko tonie. */}
+      <div className="filtr-alarmow" role="group" aria-label="Filtruj po detektorze">
+        {grupy(alerts).map((g) => (
+          <button
+            key={g.detektor ?? "wszystkie"}
+            type="button"
+            className={detektor === g.detektor ? "wybrany" : ""}
+            aria-pressed={detektor === g.detektor}
+            onClick={() => setDetektor(g.detektor)}
+          >
+            {g.etykieta} <span className="liczba">{g.ile}</span>
+          </button>
+        ))}
+      </div>
+      {widoczne.length === 0 && <p className="muted">{pustaLista(alerts.length, detektor)}</p>}
       <ul>
-        {alerts.map((a) => {
+        {widoczne.map((a) => {
           const ev = parseEvidence(a.evidence);
           return (
             <li key={a.id}>

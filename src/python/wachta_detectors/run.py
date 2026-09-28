@@ -22,10 +22,15 @@ from wachta_detectors.airports import load_airports
 from wachta_detectors.anchor import AnchorRules, by_ship, find_anchor_drag
 from wachta_detectors.coverage import count_reports
 from wachta_detectors.dark import DarkRules, find_dark_candidates, silent_aircraft, snapshot_inputs
+from wachta_detectors.embeddings import embedder_from_env
 from wachta_detectors.gaps import GapAlert, GapRules, find_gaps, suspicious
+from wachta_detectors.identity import IdentityReport, IdentityRules
+from wachta_detectors.identity import scan as scan_identity
+from wachta_detectors.indexer import alert_documents, index
 from wachta_detectors.infrastructure import load_lines
 from wachta_detectors.jamming import aggregate_jamming
 from wachta_detectors.spatial_index import LineIndex
+from wachta_detectors.sts import Encounter, StsRules, find_encounters, offshore
 
 log = logging.getLogger("wachta.detectors")
 MAX_CATCHUP_HOURS = 48
@@ -118,6 +123,23 @@ class RunnerConfig:
     d6_every: timedelta = timedelta(minutes=10)
     d4_window_hours: int = 24    # dluzej niz GapRules.max_gap (12h), zeby kazda luka miala "przed" i "po" w oknie
     d6_window_hours: int = 6     # AnchorRules.min_duration liczy sie w minutach, wiec kilka godzin wystarcza
+    # D5 co kwadrans, D7 co pol godziny: obydwa czytaja to samo dwunastogodzinne okno, a ich werdykt
+    # nie zmienia sie w tempie jednego cyklu. D7 rzadziej, bo sprzecznosc toru narasta godzinami -
+    # przemielenie tych samych dwunastu godzin co dziesiec minut daje ten sam wynik za kazdym razem.
+    d5_every: timedelta = timedelta(minutes=15)
+    d7_every: timedelta = timedelta(minutes=30)
+    # StsRules.max_duration to 12 h, a both_under_way zaglada 6 h przed spotkanie i 6 h za nie
+    # (StsRules.approach). Okno krotsze niz to obcina dlugie spotkania w polowie i odbiera dowod, ze
+    # statki w ogole gdzies plynely - a wtedy offshore() odsiewa prawdziwe spotkania jako "nabrzeze".
+    d5_window_hours: int = 12
+    d7_window_hours: int = 12    # to samo okno co D5: skok tam i z powrotem musi sie w nim zmiescic
+    # Indeksowanie wektorowe: rzadko i tylko przyrostowo. Wyszukiwanie po znaczeniu bylo jednorazowa
+    # migawka - nowe alarmy nigdy do niego nie trafialy, bo indekser uruchamialo sie z reki.
+    index_every: timedelta = timedelta(minutes=15)
+    # Pierwszy przebieg po restarcie: ile wstecz dobrac. Pelne nadrobienie (7 dni) zostaje przy
+    # recznym `python -m wachta_detectors.indexer` - petla ma trzymac indeks biezacym, nie odbudowywac
+    # go od zera przy kazdym restarcie kontenera.
+    index_backfill_hours: int = 24
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "RunnerConfig":
@@ -160,6 +182,13 @@ class Progress:
     last_ships_fetch: datetime | None = None
     last_d4_run: datetime | None = None
     last_d6_run: datetime | None = None
+    last_d5_run: datetime | None = None
+    last_d7_run: datetime | None = None
+    # Indeksowanie ma DWA znaczniki, i to nie jest powtorzenie. "Kiedy probowalismy" trzyma tempo,
+    # zeby padnieta Ollama nie zamienila zadania kwadransowego w probe co tick. "Co juz w indeksie"
+    # przesuwa sie wylacznie po udanym zapisie, zeby alarmy z czasu awarii nie wypadly z okna.
+    last_index_run: datetime | None = None
+    indexed_through: datetime | None = None
 
 
 def run_d1(conn, airports, now, rules: DarkRules = DarkRules(), config: RunnerConfig = RunnerConfig()):
@@ -230,6 +259,106 @@ def run_d6(conn, now, cable_index: LineIndex, rules: AnchorRules = AnchorRules()
     n = repo.insert_alert_rows(conn, rows)
     log.info("D6: %d statkow w oknie, %d alarmow wleczenia kotwicy, %d nowych",
              len({f.mmsi for f in fixes}), len(rows), n)
+
+
+def _sts_score(e: Encounter, rules: StsRules) -> float:
+    """find_encounters() carries no score - offshore() only filters, exactly like suspicious() in D4.
+
+    Built from what the encounter already proves: how long the hulls stayed side by side, and how
+    close they got. Both are capped, so one very long meeting cannot outrank everything else, and
+    the floor is the same 0.4 D4 uses - a candidate to read, never a verdict.
+    """
+    hours = e.duration.total_seconds() / 3600
+    bliskosc = 1.0 - min(1.0, e.min_separation_km / rules.max_separation_km)
+    return round(min(1.0, 0.4 + 0.1 * min(hours, 3) + 0.3 * bliskosc), 3)
+
+
+def _sts_evidence(e: Encounter) -> dict:
+    return {
+        "mmsi_a": e.mmsi_a, "mmsi_b": e.mmsi_b, "name_a": e.name_a, "name_b": e.name_b,
+        "start": e.start.isoformat(), "end": e.end.isoformat(),
+        "minutes": round(e.duration.total_seconds() / 60),
+        "min_separation_m": round(e.min_separation_km * 1000),
+        "mean_separation_m": round(e.mean_separation_km * 1000),
+        "mean_sog": e.mean_sog, "drift_km": e.drift_km, "samples": e.samples,
+        "note": "Candidate to check, not a verdict.",
+    }
+
+
+def run_d5(conn, now, rules: StsRules = StsRules(), window_hours: int = 12) -> None:
+    """D5: two hulls side by side long enough to move cargo, away from any anchorage.
+
+    Only offshore() encounters are written. The raw find_encounters() output is dominated by ships
+    moored next to each other and by anchorages - hundreds of pairs a day that mean nothing - and
+    offshore() is the module's own answer to which of them are worth reading. Writing the unfiltered
+    list would bury the alert table, not fill it.
+    """
+    fixes = repo.recent_ship_fixes(conn, now - timedelta(hours=window_hours))
+    sea = offshore(find_encounters(fixes, rules))
+    # Para w stalej kolejnosci: entity_id wchodzi do UNIQUE (detector, entity_id, started_at), wiec
+    # "A+B" i "B+A" byloby tym samym spotkaniem zapisanym dwa razy.
+    rows = [("D5", "+".join(sorted((e.mmsi_a, e.mmsi_b))), e.start, e.lat, e.lon,
+             _sts_score(e, rules), _sts_evidence(e)) for e in sea]
+    n = repo.insert_alert_rows(conn, rows)
+    log.info("D5: %d statkow w oknie, %d spotkan poza kotwicowiskiem, %d nowych alarmow",
+             len({f.mmsi for f in fixes}), len(sea), n)
+
+
+def _identity_score(r: IdentityReport, rules: IdentityRules) -> float:
+    """How hard the track contradicts itself: how often it jumped sides, and over how many areas."""
+    return round(min(1.0, 0.5 + 0.1 * min(r.alternations, 3) + 0.1 * min(len(r.clusters), 2)), 3)
+
+
+def _identity_evidence(r: IdentityReport) -> dict:
+    return {
+        "mmsi": r.mmsi, "verdict": r.verdict, "alternations": r.alternations,
+        "max_implied_kt": r.max_implied_kt, "names": list(r.names), "fixes": r.fixes,
+        "clusters": [{"lat": lat, "lon": lon, "segments": ile} for lat, lon, ile in r.clusters],
+        "jumps": [{"at": j.at.isoformat(), "km": j.km, "minutes": j.minutes,
+                   "implied_kt": j.implied_kt} for j in r.jumps[:10]],
+        "note": "Candidate to check, not a verdict.",
+    }
+
+
+def run_d7(conn, now, rules: IdentityRules = IdentityRules(), window_hours: int = 12) -> None:
+    """D7: one MMSI whose own track says it is two hulls.
+
+    scan() returns two kinds of finding and only one of them is a claim about a ship: "bledny punkt"
+    is a decoding error - a single position out of line - and identity.py exists precisely to keep it
+    apart from fraud. Alerting on it would report the receiver's hiccups as impersonation.
+    """
+    fixes = repo.recent_ship_fixes(conn, now - timedelta(hours=window_hours))
+    flagged = [r for r in scan_identity(fixes, rules) if r.verdict == "dwa kadluby"]
+    rows = []
+    for r in flagged:
+        # Pierwszy skok w oknie jako started_at: dopoki to samo okno go obejmuje, UNIQUE trzyma
+        # jeden alarm na te sama sprzecznosc zamiast nowego przy kazdym przebiegu.
+        first = min(j.at for j in r.jumps)
+        lat, lon, _ = r.clusters[0] if r.clusters else (r.jumps[0].to_lat, r.jumps[0].to_lon, 0)
+        rows.append(("D7", r.mmsi, first, lat, lon, _identity_score(r, rules), _identity_evidence(r)))
+    n = repo.insert_alert_rows(conn, rows)
+    log.info("D7: %d statkow w oknie, %d numerow wygladajacych na dwa kadluby, %d nowych alarmow",
+             len({f.mmsi for f in fixes}), len(flagged), n)
+
+
+def run_indexing(conn, now, progress, config: RunnerConfig = RunnerConfig(), embedder=None) -> None:
+    """Puts new alerts into the vector store, so that searching by meaning sees today's findings.
+
+    Incremental on purpose: only alerts created since the last successful pass. The manual
+    `python -m wachta_detectors.indexer` re-reads a week and is the right tool for a backfill; doing
+    that every quarter of an hour would spend minutes of Ollama time re-embedding text that has not
+    changed. The marker moves only after the write, so a failed pass loses nothing.
+    """
+    since = progress.indexed_through or (now - timedelta(hours=config.index_backfill_hours))
+    docs = alert_documents(conn, since)
+    if not docs:
+        # Pusty korpus to nie awaria - przesuwamy znacznik, bo tych alarmow po prostu nie ma.
+        progress.indexed_through = now
+        log.debug("indeks: brak nowych alarmow od %s", since)
+        return
+    written = index(conn, docs, embedder or embedder_from_env())
+    progress.indexed_through = now
+    log.info("indeks wektorowy: %d alarmow od %s, zapisanych %d", len(docs), since, written)
 
 
 def hour_of(moment):
@@ -322,6 +451,21 @@ def tick(conn, airports, now, progress, rules: DarkRules = DarkRules(), config: 
     elif progress.last_d6_run is None or now - progress.last_d6_run >= config.d6_every:
         if _guarded("D6", run_d6, conn, now, cable_index, AnchorRules(), config.d6_window_hours):
             progress.last_d6_run = now
+
+    if progress.last_d5_run is None or now - progress.last_d5_run >= config.d5_every:
+        if _guarded("D5", run_d5, conn, now, StsRules(), config.d5_window_hours):
+            progress.last_d5_run = now
+
+    if progress.last_d7_run is None or now - progress.last_d7_run >= config.d7_every:
+        if _guarded("D7", run_d7, conn, now, IdentityRules(), config.d7_window_hours):
+            progress.last_d7_run = now
+
+    if progress.last_index_run is None or now - progress.last_index_run >= config.index_every:
+        # Znacznik proby przesuwa sie zawsze, takze po bledzie. Indeksowanie wisi na Ollamie, ktora
+        # stoi poza tym stosem - jej brak ma kosztowac jedno podejscie na kwadrans i linijke w logu,
+        # dokladnie tak jak brak pliku z kablami wylacza D6 zamiast wywracac petle.
+        progress.last_index_run = now
+        _guarded("indeks wektorowy", run_indexing, conn, now, progress, config)
 
     if progress.last_d3_run is None or now - progress.last_d3_run >= config.d3_every:
         # Znacznik przebiegu przesuwamy tylko po udanym D3, zeby awaria nie kasowala kolejnej proby.

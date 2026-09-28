@@ -869,3 +869,134 @@ Użyty do napisania dodatkowych testów dla `geo.py` i `airports.py`: z 10 propo
 nieistniejącym polu). Poprawione i przepisane — plik `tests/test_geo_airports_extra.py` ma adnotację
 o pochodzeniu. Wniosek zgodny z wcześniejszymi pomiarami: model lokalny nadaje się do szkiców przy
 gotowej specyfikacji, ale każdą liczbę trzeba sprawdzić uruchomieniem.
+
+---
+
+# Domkniete zaleglosci — 2026-09-28
+
+Cztery rzeczy zapisane wprost jako nierozwiazane. Kazda albo zrobiona, albo opisana, czemu nie.
+Liczby ponizej pochodza z uruchomionego stosu, nie z szacunku.
+
+## 1. Tryb odtwarzania `/api/replay` — DZIALA, nic nie trzeba bylo naprawiac
+
+Endpoint nigdy nie byl sprawdzony na danych, bo baza nie miala historii. Teraz ma: **130 003
+pozycje samolotow** (08:31–15:28 UTC) i **74 240 pozycji statkow**.
+
+Pelne okno szesciogodzinne (09:00–15:00 UTC): **HTTP 200 w 0,38 s, 1 836 020 bajtow, 1 175 torow,
+52 417 punktow**. Kontrola SQL-em na tym samym oknie daje **te same 1 175 samolotow i te same
+52 417 kubelkow 30-sekundowych** — endpoint nie gubi nic poza zamierzonym przerzedzaniem
+(68 384 surowe wiersze → 52 417 punktow). Tory sa spojne: `path` i `timestamps` tej samej dlugosci,
+czasy rosnace, zaden `hex` nie powtorzony. Granice okna odrzucane poprawnie (400), strefa czasowa
+uwzgledniana. Szczegoly i komendy: [URUCHOMIENIE.md](URUCHOMIENIE.md#tryb-odtwarzania--sprawdzony-na-pelnym-oknie-2026-09-28).
+
+## 2. D5 i D7 wpiete w petle detektorow
+
+Na tych samych zasadach co D4 i D6: wlasny interwal, wlasne okno, zapis przez `insert_alert_rows`,
+`_guarded` dookola.
+
+| Detektor | Co odpala | Interwal | Okno | Dlaczego tyle |
+|---|---|---|---|---|
+| **D5** przeladunek burta w burte | `offshore(find_encounters(...))` | 15 min | 12 h | `StsRules.max_duration` to 12 h, a sprawdzenie „oba statki gdzies plynely” zaglada 6 h przed spotkanie i 6 h za nie |
+| **D7** tozsamosc statku | `scan()`, tylko werdykt „dwa kadluby” | 30 min | 12 h | werdykt narasta godzinami; mielenie tych samych 12 h co 10 minut daje ten sam wynik |
+
+**Pierwszy przebieg na zywo (1 103 statki w oknie):**
+
+```
+15:46  D5: 1103 statkow w oknie, 16 spotkan poza kotwicowiskiem, 16 nowych alarmow
+15:46  D7: 1103 statkow w oknie, 0 numerow wygladajacych na dwa kadluby, 0 nowych alarmow
+16:02  D5: 1110 statkow w oknie, 19 spotkan poza kotwicowiskiem,  3 nowych alarmow
+```
+
+Drugi przebieg D5 pokazuje, ze odsiewanie powtorzen dziala: z 19 spotkan w oknie **nowe sa trzy**,
+reszta to te same spotkania, ktore juz maja swoj wiersz (UNIQUE po `detector, entity_id, started_at`).
+D7 w tym cyklu nie ruszyl — ma odstep 30 minut, wiec nastepny przebieg wypada o 16:16.
+
+**D7 zwrocil zero i to jest wynik poprawny** — na wodach finskich nie ma w tej dobie numeru MMSI,
+ktorego wlasny tor przeskakuje tam i z powrotem miedzy oddalonymi obszarami. Progi zostaly, jakie
+byly. Cztery numery trafily do kategorii „bledny punkt” (pojedyncza pozycja poza torem) i **celowo
+nie sa alarmem**: `identity.py` istnieje po to, zeby nie zglaszac czkawki odbiornika jako oszustwa.
+
+**D5 dal 16 alarmow i trzeba powiedziec wprost, co to jest.** Po sprawdzeniu typow AIS: 15 z 16 par
+to ruch sluzbowy — holowniki (52), pilotowki (50), jednostki holujace (31), promy (60). Jedyna para
+ladunkowiec + tankowiec to ROSTRUM SOLAR (70) + AURORA (80), 42 minuty w odleglosci **745 m**, czyli
+przy samej granicy `max_separation_km` (800 m) — to raczej mijanka niz przeladunek. Dokladnie to
+przewidzial wczesniejszy przebieg na dobie dunskiego AIS. **Progow nie ruszalem**: filtr po typie
+jednostki to osobna decyzja produktowa (jak przy D6, gdzie handlowe i robocze ida na osobne listy),
+a nie strojenie detektora pod ladniejszy wynik.
+
+## 3. Indeks wektorowy nadaza za alarmami
+
+Bylo: jednorazowa migawka z reki. W bazie lezalo **2 000 zdarzen GDELT i 0 alarmow** — wyszukiwanie
+po znaczeniu odpowiadalo „nic nie znalazlem” na kazde pytanie o to, co detektory znalazly.
+
+Jest: krok w petli co 15 minut, przyrostowy (tylko alarmy nowsze niz ostatni udany przebieg), z
+nadrobieniem 24 h po restarcie. Pelne nadrobienie tygodnia zostaje przy recznym
+`python -m wachta_detectors.indexer`.
+
+```
+15:46:28  indeks wektorowy: 24 alarmow od 2026-09-27 15:45:51+00:00, zapisanych 24
+16:02:42  indeks wektorowy: 21 alarmow od 2026-09-28 15:45:51+00:00, zapisanych 21
+```
+
+Pierwszy przebieg siegnal 24 h wstecz (nadrobienie po restarcie) i wzial **24 alarmy (D4: 5, D5: 16,
+D6: 3)** obok 2 000 zdarzen GDELT. Drugi, kwadrans pozniej, ruszyl **od chwili poprzedniego**, nie
+od doby wstecz — przyrostowosc dziala na zywo, nie tylko w tescie.
+
+Brak Ollamy nie wywraca petli, tak samo jak brak pliku z kablami nie wywraca D6. Sa na to dwa
+znaczniki, i to nie jest powtorzenie: „kiedy probowalismy” przesuwa sie zawsze, zeby padnieta Ollama
+kosztowala jedno podejscie na kwadrans zamiast jednego na kazdy tick; „co juz w indeksie” przesuwa
+sie wylacznie po udanym zapisie, zeby alarmy z czasu awarii nie wypadly z okna.
+
+**Blad znaleziony dopiero na kontenerze, nie w testach.** `indexer.py` liczyl sciezke do migawki
+GDELT przy imporcie (`parents[3]`), a obraz kopiuje tylko `src/python` — pakiet lezy w `/app`, wiec
+tej sciezki nie ma. Od chwili, gdy petla zaczela importowac ten modul, **caly proces detektorow
+wpadl w petle restartow** (`IndexError: 3`, log potwierdza). Poprawione: brak migawki ma wygladac
+jak brak pliku, nie jak wyjatek.
+
+Kontener `detectors` dostal w `compose.yaml` adres Ollamy (`WACHTA_OLLAMA_URL`) i
+`host.docker.internal`, bo model chodzi na hoscie — dokladnie z tego samego powodu, dla ktorego ma
+to juz `api`. `OllamaEmbedder` czyta ten adres przez `embeddings.embedder_from_env()`.
+
+## 4. Bramka ewaluacji rozroznia progi, pod ktorymi powstala etykieta
+
+`dark.snapshot_inputs()` zapisuje w kazdej probce D1 uzyte progi i ich odcisk (`rules_version`).
+`eval/run_eval.py` tego nie czytal, wiec probki sprzed i po zmianie progu wpadaly do jednej sredniej.
+Jedna liczba z dwoch konfiguracji nie opisuje zadnej z nich.
+
+Teraz `eval_d1()` grupuje przypadki po `rules_version`:
+
+- **naglowkowe** precyzja i recall licza sie **wylacznie z przypadkow spod obecnych progow**;
+- pozostale sa raportowane obok, pod kluczem `by_rules`, razem z licznikiem `n_other_rules` — nie
+  znikaja, tylko przestaja sie mieszac;
+- przypadki **bez** `rules_version` to recznie napisane scenariusze regresyjne (zestaw syntetyczny);
+  zadna konfiguracja ich nie wybrala, wiec licza sie zawsze;
+- gdy **wszystkie** etykiety pochodza spod innych progow, wynik to `null`, a nie 1,0. `prf()` na
+  zerze przypadkow zwraca komplet punktow, wiec zmiana progu przechodzilaby bramke za pomiar,
+  ktorego nikt nie wykonal. Bramka traktuje `null` jako spadek (`metric_drops()`).
+
+Poprawiony zostal takze producent etykiet: `eval/label_d1.py` przepisywal ze snapshotu tylko wejscia
+detektora, wiec `rules_version` konczyl sie w bazie i nigdy nie trafial do pliku, po ktorym bramka
+miala rozrozniac konfiguracje. Teraz progi jada razem z przypadkiem.
+
+`eval/baseline.json` **nie byl ruszany** — aktualny odcisk progow zgadza sie z tym, pod ktorym
+powstal zestaw syntetyczny, wiec liczby sie nie zmienily.
+
+## Walidacja
+
+- `python -m pytest -q` → **466 testow** (bylo 441; +25 nowych)
+- `python eval/run_eval.py --check eval/baseline.json` → **0**
+- Stos na zywo: D1, D3, D4, D5, D6, D7, pokrycie i indeks wektorowy przechodza w jednym cyklu
+
+Kazde zachowanie krytyczne udowodnione mutacja (cofniecie zmiany, czerwony test, przywrocenie):
+filtr `offshore()` w D5, filtr werdyktu w D7, `started_at` z pierwszego skoku, przyrostowosc
+indeksowania, `_guarded` dookola indeksowania, oba znaczniki postepu, adres Ollamy z konfiguracji,
+sciezka do migawki w obrazie, podzial po `rules_version`, `null` zamiast darmowego zaliczenia,
+`metric_drops()` na `null`, przenoszenie progow przez `label_d1.py`.
+
+## Czego tu nie ma
+
+- **README.md nie zostal zaktualizowany** — plik jest poza zakresem tej pracy. Jego tabela „Poza
+  stosem — kod jest, ale nic tego nie uruchamia w produkcji” jest teraz nieaktualna: D4, D5, D6 i D7
+  chodza w petli, a warstwa morska ma tabele `ship_position`. Do poprawienia przy najblizszej okazji.
+- **Filtr typu jednostki dla D5** — zmierzony jako potrzebny (15 z 16 alarmow to holowniki, pilotowki
+  i promy), ale swiadomie nieodpalony: to decyzja produktowa, nie strojenie progu.

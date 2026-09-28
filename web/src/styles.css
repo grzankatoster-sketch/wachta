@@ -298,3 +298,21 @@ body:has([role="dialog"]) .szukaj {
 @media (max-width: 1280px) {
   body:has([role="dialog"]) .szukaj { display: none; }
 }
+
+/* Filtr po detektorze. Sortowanie po wyniku nie zastapiloby go: wyniki roznych detektorow nie sa
+   porownywalne, kazdy znaczy co innego. */
+.filtr-alarmow { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 9px; }
+.filtr-alarmow button {
+  padding: 3px 8px;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  background: #161b22;
+  color: #c9d1d9;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.filtr-alarmow button:hover { background: #21262d; }
+.filtr-alarmow button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+.filtr-alarmow .wybrany { border-color: #58a6ff; background: #14243a; color: #e6edf3; }
+.filtr-alarmow .liczba { color: #8b949e; font-variant-numeric: tabular-nums; }

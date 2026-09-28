@@ -58,6 +58,10 @@ def import_():
                 "case": f"real_{r['hex']}_{r['evaluated_at']}",
                 "last_seen": inputs["last_seen"], "now": inputs["now"], "coverage": inputs["coverage"],
                 "alive": inputs["alive"], "airports": inputs["airports"], "expected": r["label"] == "y",
+                # Progi jada razem z przypadkiem. Bez nich plik z etykietami jest jedna kupka probek
+                # z roznych konfiguracji, a bramka usrednia pomiary, ktore nie opisuja tego samego
+                # detektora - run_eval.eval_d1() rozdziela je wlasnie po tym polu.
+                "rules": inputs.get("rules"), "rules_version": inputs.get("rules_version"),
             })
     with (HERE / "fixtures" / "d1_real_cases.jsonl").open("a", encoding="utf-8") as f:
         f.writelines(json.dumps(c) + "\n" for c in cases)

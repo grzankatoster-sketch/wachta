@@ -231,6 +231,31 @@ w przeciwnym razie API odpowiada 400 z treścią „Window must be positive and 
 
 `/api/aircraft/live` przyjmuje opcjonalnie `militaryOnly` oraz ramkę `minLat`, `minLon`, `maxLat`, `maxLon`.
 
+#### Tryb odtwarzania — sprawdzony na pełnym oknie (2026-09-28)
+
+Do tej pory `/api/replay` odpowiadał tylko pustą tablicą, bo baza nie miała historii. Przy 130 003
+zapisanych pozycjach samolotów (08:31–15:28 UTC) okno sześciogodzinne wreszcie ma treść:
+
+```bash
+curl -s "http://localhost:8080/api/replay?from=2026-09-28T09:00:00Z&to=2026-09-28T15:00:00Z"
+```
+
+| Co zmierzone | Wynik |
+|---|---|
+| Odpowiedź | HTTP 200, 1 836 020 bajtów, **0,38 s** |
+| Tory | **1 175** samolotów, **52 417** punktów łącznie (najdłuższy tor 264 punkty) |
+| Zgodność z bazą | SQL na tym samym oknie: 1 175 samolotów i 52 417 kubełków 30-sekundowych — **co do sztuki** |
+| Przerzedzanie | 68 384 surowych wierszy → 52 417 punktów; to zamierzone `DISTINCT ON` po kubełku 30 s, nie gubienie danych |
+| Spójność toru | `path` i `timestamps` tej samej długości, czasy rosnące, żaden `hex` nie występuje dwa razy |
+| Zakres czasu | 09:00:08–14:59:57 UTC, czyli dokładnie zamówione okno |
+| `militaryOnly` | domyślnie `true`; na godzinie 14:00–15:00 `false` daje 957 779 B wobec 649 549 B |
+
+Granice okna (wszystkie zwracają **400**, i tak ma być): brak `from`/`to`, `to` przed `from`,
+`to` równe `from`, okno dłuższe niż 6 h (`Window must be positive and at most 6 h.`).
+
+Strefa czasowa jest uwzględniana, a nie zgadywana: `09:00:00Z`, `09:00:00` bez sufiksu oraz
+`12:00:00+03:00` zwróciły ten sam komplet 295 torów.
+
 ### 5.5. Mapa
 
 Otwórz `http://localhost:8081` — albo swój `WACHTA_WEB_PORT`. Na tej maszynie było to **8083**

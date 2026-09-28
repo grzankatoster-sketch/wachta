@@ -138,3 +138,20 @@ def test_index_returns_how_many_went_in():
 
 def test_indexing_nothing_is_not_an_error():
     assert index(None, [], DeterministicEmbedder()) == 0
+
+
+def test_the_snapshot_path_survives_a_package_without_a_repository_above_it():
+    """Zlapane na zywym kontenerze: obraz kopiuje tylko src/python.
+
+    FIXTURES liczylo sie przy imporcie z parents[3], wiec w obrazie (pakiet lezy w /app) modul
+    wywalal sie IndexError-em jeszcze przed pierwsza linijka pracy - a od kiedy importuje go petla
+    detektorow, kladlo to caly proces w kolko. Mutacja: powrot do parents[3] psuje ten test.
+    """
+    from wachta_detectors.indexer import fixtures_dir
+
+    assert fixtures_dir("/app/wachta_detectors/indexer.py").name == "fixtures"
+    assert fixtures_dir(__file__).parts[-2:] == ("eval", "fixtures")
+
+
+def test_a_missing_snapshot_is_an_empty_corpus_not_an_error(tmp_path):
+    assert event_documents(tmp_path / "nie_ma_takiego_pliku.json") == []

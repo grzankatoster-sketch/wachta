@@ -513,3 +513,266 @@ class TestMaritimeScheduling:
         progress = loop.Progress()
         loop.tick(conn, [], NOW, progress, cable_index=None)
         assert progress.last_d6_run is None
+
+
+class TestD5Wiring:
+    """run_d5 must write only what offshore() vouches for - not every pair of hulls standing close.
+
+    find_encounters() on one real day returns hundreds of meetings, almost all of them ships moored
+    next to each other or sitting on an anchorage. offshore() is sts.py's own answer to which of them
+    are worth reading, and skipping it would bury the alert table instead of filling it.
+    """
+
+    T0 = datetime(2026, 9, 27, 8, 0, tzinfo=timezone.utc)
+    LAT, LON_A, LON_B = 59.0, 22.0, 22.005      # zmierzone: 286 m, czyli burta w burte
+
+    def _standing(self, mmsi, lon, minutes=40, start=0):
+        from wachta_detectors.anchor import ShipFix
+        return [ShipFix(mmsi=mmsi, ts=self.T0 + timedelta(minutes=start + m), lat=self.LAT,
+                        lon=lon, sog=0.2) for m in range(minutes)]
+
+    def _arrival(self, mmsi, lon):
+        """Dowod, ze statek tam PRZYPLYNAL i odplynal - bez tego offshore() uzna go za stojacego przy kei."""
+        from wachta_detectors.anchor import ShipFix
+        out = []
+        for m in (-30, -25, -20, -15):
+            out.append(ShipFix(mmsi=mmsi, ts=self.T0 + timedelta(minutes=m), lat=self.LAT + m * 0.01,
+                               lon=lon, sog=10.0))
+        for m in (60, 65, 70, 75):
+            out.append(ShipFix(mmsi=mmsi, ts=self.T0 + timedelta(minutes=m), lat=self.LAT + m * 0.01,
+                               lon=lon, sog=10.0))
+        return out
+
+    def _meeting(self):
+        return (self._standing("111111111", self.LON_A) + self._arrival("111111111", self.LON_A)
+                + self._standing("222222222", self.LON_B) + self._arrival("222222222", self.LON_B))
+
+    def test_a_meeting_in_open_water_becomes_a_d5_alert(self, fake):
+        conn, repo = fake
+        repo.ship_fixes = self._meeting()
+        loop.run_d5(conn, self.T0 + timedelta(hours=2))
+        [(detector, entity_id, started_at, lat, lon, score, evidence)] = repo.alert_rows
+        assert detector == "D5"
+        assert entity_id == "111111111+222222222"
+        assert 0.0 < score <= 1.0
+        assert evidence["minutes"] >= 30
+        assert evidence["min_separation_m"] < 800
+        assert evidence["note"].startswith("Candidate")
+
+    def test_two_hulls_that_never_sailed_are_not_a_transfer(self, fake):
+        # Dokladnie ta sama para, tylko bez dowodu, ze gdziekolwiek plynela: to nabrzeze, nie
+        # przeladunek. Mutacja - zapis find_encounters() z pominieciem offshore() - psuje ten test.
+        conn, repo = fake
+        repo.ship_fixes = self._standing("111111111", self.LON_A) + self._standing("222222222", self.LON_B)
+        loop.run_d5(conn, self.T0 + timedelta(hours=2))
+        assert repo.alert_rows == []
+
+    def test_a_short_brush_past_is_not_an_alert(self, fake):
+        conn, repo = fake
+        repo.ship_fixes = (self._standing("111111111", self.LON_A, minutes=10)
+                           + self._arrival("111111111", self.LON_A)
+                           + self._standing("222222222", self.LON_B, minutes=10)
+                           + self._arrival("222222222", self.LON_B))
+        loop.run_d5(conn, self.T0 + timedelta(hours=2))
+        assert repo.alert_rows == []          # 10 minut to mniej niz StsRules.min_duration
+
+    def test_the_query_window_comes_from_config(self, fake):
+        conn, repo = fake
+        loop.run_d5(conn, NOW, window_hours=9)
+        assert NOW - repo.since["ships"] == timedelta(hours=9)
+
+
+class TestD7Wiring:
+    """run_d7 must alert on 'dwa kadluby' and stay silent on 'bledny punkt'.
+
+    identity.py exists to tell those two apart: one is a number worn by two ships, the other is a
+    receiver hiccup. Reporting the second as fraud is the failure the module was written to avoid.
+    """
+
+    T0 = datetime(2026, 9, 27, 4, 0, tzinfo=timezone.utc)
+    A = (59.0, 22.0)
+    B = (59.5, 23.0)        # zmierzone: 79,5 km od A, znacznie ponad min_separation_km (20)
+
+    def _fixes(self, mmsi, plan):
+        from wachta_detectors.anchor import ShipFix
+        return [ShipFix(mmsi=mmsi, ts=self.T0 + timedelta(minutes=i), lat=lat, lon=lon, sog=8.0)
+                for i, (lat, lon) in enumerate(plan)]
+
+    def _two_hulls(self, mmsi="265111222"):
+        plan = []
+        for area in (self.A, self.B, self.A, self.B):
+            plan += [area] * 3          # trzy spojne pozycje = odcinek, ktory cos znaczy
+        return self._fixes(mmsi, plan)
+
+    def _one_bad_fix(self, mmsi="265111222"):
+        return self._fixes(mmsi, [self.A] * 3 + [self.B] + [self.A] * 3)
+
+    def test_one_number_in_two_places_becomes_a_d7_alert(self, fake):
+        conn, repo = fake
+        repo.ship_fixes = self._two_hulls()
+        loop.run_d7(conn, self.T0 + timedelta(hours=1))
+        [(detector, entity_id, started_at, lat, lon, score, evidence)] = repo.alert_rows
+        assert detector == "D7"
+        assert entity_id == "265111222"
+        assert evidence["verdict"] == "dwa kadluby"
+        assert evidence["alternations"] >= 2
+        assert evidence["max_implied_kt"] > 40.0
+        assert 0.0 < score <= 1.0
+
+    def test_a_single_bad_fix_is_not_reported_as_a_second_hull(self, fake):
+        # scan() zwraca ten przypadek jako "bledny punkt". Mutacja - zapis wszystkiego, co zwrocil
+        # scan(), bez filtra na werdykt - psuje ten test.
+        conn, repo = fake
+        repo.ship_fixes = self._one_bad_fix()
+        loop.run_d7(conn, self.T0 + timedelta(hours=1))
+        assert repo.alert_rows == []
+
+    def test_a_rescue_helicopter_is_not_an_impostor(self, fake):
+        # Prefiks 111 to statek powietrzny SAR, nie statek - 160 wezlow to jego praca.
+        conn, repo = fake
+        repo.ship_fixes = self._two_hulls(mmsi="111250123")
+        loop.run_d7(conn, self.T0 + timedelta(hours=1))
+        assert repo.alert_rows == []
+
+    def test_the_alert_starts_at_the_first_impossible_jump(self, fake):
+        # started_at wchodzi do UNIQUE (detector, entity_id, started_at): gdyby bralo "teraz",
+        # kazdy przebieg zapisywalby te sama sprzecznosc jako nowy alarm.
+        conn, repo = fake
+        repo.ship_fixes = self._two_hulls()
+        loop.run_d7(conn, self.T0 + timedelta(hours=1))
+        loop.run_d7(conn, self.T0 + timedelta(hours=2))
+        assert len({row[2] for row in repo.alert_rows}) == 1
+        assert repo.alert_rows[0][2] == self.T0 + timedelta(minutes=3)
+
+    def test_the_query_window_comes_from_config(self, fake):
+        conn, repo = fake
+        loop.run_d7(conn, NOW, window_hours=5)
+        assert NOW - repo.since["ships"] == timedelta(hours=5)
+
+
+class TestIndeksowanie:
+    """Nowe alarmy maja trafiac do wyszukiwania po znaczeniu same, a brak Ollamy ma to tylko odlozyc.
+
+    Indeks byl jednorazowa migawka: `python -m wachta_detectors.indexer` uruchamiane z reki, wiec
+    wszystko, co detektory znalazly pozniej, bylo dla wyszukiwarki niewidzialne - i wygladalo jak
+    spokojny swiat, a nie jak nieaktualny indeks.
+    """
+
+    @staticmethod
+    def _spy(monkeypatch, fail=False):
+        """Podglada, o co indekser prosi i co zapisuje. Ollama nigdzie tu nie wystepuje."""
+        calls: list[dict] = []
+
+        def alert_documents(conn, since, limit=2000):
+            calls.append({"since": since})
+            return [object()]
+
+        def index(conn, docs, embedder=None, on_progress=None):
+            if fail:
+                raise OSError("connection refused - Ollama nie chodzi")
+            calls[-1]["written"] = len(list(docs))
+            return len(list(docs))
+
+        monkeypatch.setattr(loop, "alert_documents", alert_documents)
+        monkeypatch.setattr(loop, "index", index)
+        return calls
+
+    def test_the_first_pass_after_a_restart_reaches_back_a_bounded_window(self, fake, monkeypatch):
+        conn, _ = fake
+        calls = self._spy(monkeypatch)
+        config = loop.RunnerConfig(index_backfill_hours=6)
+        loop.run_indexing(conn, NOW, loop.Progress(), config)
+        assert NOW - calls[0]["since"] == timedelta(hours=6)
+
+    def test_only_alerts_newer_than_the_last_pass_are_re_indexed(self, fake, monkeypatch):
+        # Mutacja: staly punkt startu (now - index_backfill_hours) zamiast znacznika - drugi przebieg
+        # przeliczalby wtedy cala dobe jeszcze raz, placac za to czasem Ollamy przy kazdym kwadransie.
+        conn, _ = fake
+        calls = self._spy(monkeypatch)
+        progress = loop.Progress()
+        loop.run_indexing(conn, NOW, progress)
+        loop.run_indexing(conn, NOW + timedelta(minutes=15), progress)
+        assert calls[1]["since"] == NOW
+        assert progress.indexed_through == NOW + timedelta(minutes=15)
+
+    def test_a_missing_ollama_costs_the_indexing_pass_and_nothing_else(self, fake, monkeypatch):
+        # Tak samo jak brak pliku z kablami wylacza D6 zamiast wywracac petle.
+        conn, repo = fake
+        self._spy(monkeypatch, fail=True)
+        progress = loop.Progress()
+        loop.tick(conn, [], NOW, progress)
+        assert repo.coverage_hours          # pokrycie i D3 policzone mimo padnietej Ollamy
+        assert progress.last_d3_run == NOW
+
+    def test_a_failed_pass_does_not_swallow_the_alerts_it_did_not_index(self, fake, monkeypatch):
+        conn, _ = fake
+        progress = loop.Progress()
+        self._spy(monkeypatch, fail=True)
+        with pytest.raises(OSError):
+            loop.run_indexing(conn, NOW, progress)
+        assert progress.indexed_through is None      # nastepny przebieg siegnie po te same alarmy
+
+    def test_a_failed_pass_is_not_retried_every_tick(self, fake, monkeypatch):
+        # Znacznik proby przesuwa sie takze po bledzie: padnieta Ollama ma kosztowac jedno podejscie
+        # na kwadrans, a nie jedno na kazdy tick petli.
+        conn, _ = fake
+        calls = self._spy(monkeypatch, fail=True)
+        config = loop.RunnerConfig(index_every=timedelta(minutes=15))
+        progress = loop.Progress()
+
+        loop.tick(conn, [], NOW, progress, config=config)
+        loop.tick(conn, [], NOW + timedelta(minutes=1), progress, config=config)
+        assert len(calls) == 1
+
+        loop.tick(conn, [], NOW + timedelta(minutes=16), progress, config=config)
+        assert len(calls) == 2
+
+    def test_no_new_alerts_is_not_a_failure(self, fake, monkeypatch):
+        conn, _ = fake
+        monkeypatch.setattr(loop, "alert_documents", lambda conn, since, limit=2000: [])
+        monkeypatch.setattr(loop, "index", lambda *a, **kw: pytest.fail("pusty korpus nie ma czego liczyc"))
+        progress = loop.Progress()
+        loop.run_indexing(conn, NOW, progress)
+        assert progress.indexed_through == NOW
+
+    def test_indexing_runs_on_its_own_cadence_not_every_tick(self, fake, monkeypatch):
+        conn, _ = fake
+        calls = self._spy(monkeypatch)
+        config = loop.RunnerConfig(index_every=timedelta(minutes=30))
+        progress = loop.Progress()
+
+        loop.tick(conn, [], NOW, progress, config=config)
+        loop.tick(conn, [], NOW + timedelta(minutes=10), progress, config=config)
+        assert len(calls) == 1
+
+        loop.tick(conn, [], NOW + timedelta(minutes=31), progress, config=config)
+        assert len(calls) == 2
+
+
+class TestMaritimeSchedulingD5D7:
+    def test_d5_and_d7_run_on_their_own_cadence_not_every_tick(self, fake):
+        conn, repo = fake
+        config = loop.RunnerConfig(d4_every=timedelta(hours=9), d6_every=timedelta(hours=9),
+                                   d5_every=timedelta(minutes=20), d7_every=timedelta(minutes=40))
+        progress = loop.Progress()
+
+        loop.tick(conn, [], NOW, progress, config=config)
+        assert progress.last_d5_run == NOW and progress.last_d7_run == NOW
+
+        loop.tick(conn, [], NOW + timedelta(minutes=25), progress, config=config)
+        assert progress.last_d5_run == NOW + timedelta(minutes=25)
+        assert progress.last_d7_run == NOW          # 25 minut to za wczesnie przy odstepie 40 minut
+
+        loop.tick(conn, [], NOW + timedelta(minutes=45), progress, config=config)
+        assert progress.last_d7_run == NOW + timedelta(minutes=45)
+
+
+class TestAdresOllamy:
+    """Model osadzen chodzi na hoscie, wiec 'localhost' w kontenerze wskazuje na zly komputer."""
+
+    def test_the_embedder_follows_the_configured_address(self):
+        from wachta_detectors.embeddings import embedder_from_env
+
+        assert embedder_from_env({}).url == "http://localhost:11434/api/embed"
+        assert embedder_from_env({"WACHTA_OLLAMA_URL": "http://host.docker.internal:11434/"}).url \
+            == "http://host.docker.internal:11434/api/embed"

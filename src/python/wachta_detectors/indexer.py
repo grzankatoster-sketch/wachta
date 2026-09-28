@@ -29,7 +29,21 @@ from pathlib import Path
 from .embeddings import DIMENSIONS, OllamaEmbedder
 from .vector_store import Document, PgVectorStore, index_documents
 
-FIXTURES = Path(__file__).resolve().parents[3] / "eval" / "fixtures"
+def fixtures_dir(module_file: str | Path = __file__) -> Path:
+    """Where the frozen GDELT snapshot lives, when this runs from a checkout of the repository.
+
+    The image copies only `src/python`, so above the package there is no repository layout to walk up
+    to and `parents[3]` raised IndexError - at IMPORT time, which took the whole detector loop down
+    with it the moment the loop started importing this module. The snapshot is optional anyway:
+    event_documents() already answers "no events" when the file is not there, so its absence has to
+    look like a missing file and not like a crash.
+    """
+    here = Path(module_file).resolve()
+    korzen = here.parents[3] if len(here.parents) > 3 else here.parent
+    return korzen / "eval" / "fixtures"
+
+
+FIXTURES = fixtures_dir()
 ALERT_WINDOW = timedelta(days=7)
 
 

@@ -11,15 +11,17 @@ matters more here than speed: the corpus includes source material that should no
 third party just to be indexed.
 """
 import json
+import os
 import urllib.error
 import urllib.request
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import blake2b
 from math import sqrt
 from typing import Protocol
 
-OLLAMA_EMBED = "http://localhost:11434/api/embed"
+OLLAMA_BASE = "http://localhost:11434"
+OLLAMA_EMBED = f"{OLLAMA_BASE}/api/embed"
 DEFAULT_MODEL = "bge-m3"
 DIMENSIONS = 1024        # bge-m3; zmiana modelu wymaga migracji kolumny w bazie
 
@@ -104,6 +106,20 @@ class DeterministicEmbedder:
                 vector[int.from_bytes(digest[:4], "big") % self.dims] += 1.0
             out.append(normalise(vector))
         return out
+
+
+def embedder_from_env(env: Mapping[str, str] | None = None) -> "OllamaEmbedder":
+    """The real embedder, pointed wherever Ollama actually runs.
+
+    "localhost" is a different machine depending on who asks. The model runs on the HOST, so a
+    detector process inside compose that keeps the default would call itself and get a refused
+    connection - which looks exactly like "no new alerts to index". The API container already takes
+    the same address from the environment (Ollama__Url), so the two agree instead of each hardcoding
+    a different assumption.
+    """
+    env = os.environ if env is None else env
+    base = (env.get("WACHTA_OLLAMA_URL") or OLLAMA_BASE).rstrip("/")
+    return OllamaEmbedder(url=f"{base}/api/embed")
 
 
 def embed_in_batches(embedder: Embedder, texts: Iterable[str],

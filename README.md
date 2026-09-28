@@ -43,34 +43,39 @@ Bałtykiem generowałoby fałszywe alarmy.
 
 Każdy wynik detektora jest oznaczony jako **„do sprawdzenia”**, nigdy jako zarzut.
 
-### Poza stosem — kod jest, ale nic tego nie uruchamia w produkcji
+### Co chodzi w pętli, a co nadal tylko w skryptach
 
-To trzeba powiedzieć wprost: **warstwa morska, sankcje, kable, GDELT i linia frontu nie są częścią
-działającego stosu.** Nie mają tabel w bazie (migracje obejmują tylko źródła, samoloty, detektory
-i osadzenia), nie mają endpointów w API i nie ma ich w pętli `detectors`. Istnieją jako moduły
-Pythona z testami oraz skrypty jednorazowe w `eval/feasibility/`, uruchamiane ręcznie na pobranych
-albo zamrożonych danych.
+Ta granica przesuwa się w miarę pracy, więc jest tu wypisana wprost — README, który jej nie
+pilnuje, zaczyna kłamać po kilku dniach.
+
+**W działającym stosie**, liczone same, z alarmami trafiającymi do bazy i na mapę:
+
+| Detektor | Co wykrywa | Źródło |
+|---|---|---|
+| D1 | samolot przestaje nadawać mimo działającego odbioru | ADS-B (adsb.lol) |
+| D3 | zakłócenia GPS w komórce H3 | ADS-B |
+| D4 | statek milknie na AIS w ruchu | AIS (Digitraffic) |
+| D5 | dwa statki burta w burtę poza kotwicowiskiem | AIS |
+| D6 | podejrzenie wleczenia kotwicy po kablu | AIS + kable z OSM |
+| D7 | jeden numer MMSI w dwóch miejscach | AIS |
+
+Do tego: model pokrycia odbiorników, indeksowanie alarmów do bazy wektorowej (co 15 min,
+przyrostowo) i wyszukiwanie po znaczeniu przez `/api/search`.
+
+**Poza pętlą — kod jest i jest zmierzony, ale nikt go cyklicznie nie uruchamia:**
 
 | Obszar | Moduł | Jak dziś działa |
 |---|---|---|
-| AIS, statki | `ais.py`, `gaps.py` (D4), `sts.py` (D5) | skrypty `eval/feasibility/run_d4.py`, `run_d5.py` na pobranych plikach |
-| Wleczenie kotwicy nad kablem (D6) | `anchor.py`, `infrastructure.py` | `run_d6.py` na dobie duńskiego AIS |
-| Podmiana tożsamości statku (D7) | `identity.py` | `run_d7.py` |
-| Tor wyścigowy / wzorce lotu (D2) | `racetrack.py` | testy syntetyczne |
-| Sankcje, flota cieni | `sanctions.py`, `dark.py`, `dark_sts.py` | `fetch_sanctions.py`, `run_dark_sts.py` |
-| Zdarzenia i „dwie wersje” (GDELT) | `events.py`, `versions.py` | `fetch_events.py`, `fetch_versions.py` |
-| Anomalie doniesień (D8) | `anomalies.py` | `run_anomalies.py` |
-| Agent-analityk, MCP | `analyst.py`, `mcp_server.py`, `vector_store.py` | `run_analyst.py`, [docs/MCP.md](docs/MCP.md); faza F3, nie w `compose.yaml` |
-| Kable podmorskie, wsparcie, linia frontu | — | `fetch_cables.py`, `fetch_aid.py`, `fetch_frontline.py` |
+| Tor wyścigowy, samolot na dyżurze (D2) | `racetrack.py` | `eval/feasibility/fetch_traces.py` na żądanie |
+| Nietypowe skupiska doniesień (D8) | `anomalies.py` | `run_anomalies.py` na pobranym GDELT |
+| Ciemny STS (złożenie D4 i D5) | `dark_sts.py` | `run_dark_sts.py` na dobie duńskiego AIS |
+| Sankcje i flota cieni | `sanctions.py` | `fetch_sanctions.py`, wzbogaca wyniki skryptów |
+| Dwie wersje wydarzenia | `versions.py` | `fetch_versions.py` |
+| Linia frontu, wsparcie dla Ukrainy | — | `fetch_frontline.py`, `fetch_aid.py`, widoczne na statycznym demo |
+| Model ML dla D3 | `jamming_features.py` | `eval/train_jamming.py`; regułą dalej liczy detektor |
 
-Statyczne demo z częścią tych warstw (samoloty, zakłócenia GPS, kable — dane wklejone w HTML,
-bez bazy i Dockera) buduje `python eval/feasibility/build_demo.py` → `docs/demo/index.html`.
-
-### Czego nie ma i nie zadziała bez kluczy
-
-Południowy Bałtyk w AIS wymaga klucza AISStream, pożary i uderzenia — klucza NASA FIRMS. Bez nich
-te źródła nie pobiorą nic. Licencja DeepStateMap jest niewyjaśniona; przed publicznym demem trzeba
-zapytać autorów o zgodę. Szczegóły: [docs/SOURCES.md](docs/SOURCES.md).
+Statyczna mapa `docs/demo/index.html` pokazuje **wszystkie** te warstwy naraz, ale jako migawkę
+z konkretnej chwili. Aplikacja pod `http://localhost:8083` pokazuje mniej warstw, za to na żywo.
 
 ## 3. Jak to uruchomić
 

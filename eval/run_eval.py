@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / "src" / "python"))
 import h3  # noqa: E402
 
 from wachta_detectors.anchor import ShipFix  # noqa: E402
-from wachta_detectors.dark import LastSeen, find_dark_candidates  # noqa: E402
+from wachta_detectors.dark import LastSeen, find_dark_candidates, rules_version  # noqa: E402
 from wachta_detectors.gaps import find_gaps, suspicious  # noqa: E402
 from wachta_detectors.identity import scan as scan_identity  # noqa: E402
 from wachta_detectors.racetrack import TracePoint, find_loiters  # noqa: E402
@@ -46,22 +46,65 @@ def eval_d3() -> dict:
     return {**prf(tp, fp, fn), "n_positive": len(labels["positive"]), "n_negative": len(labels["negative"])}
 
 
-def eval_d1(path: Path) -> dict:
-    if not path.exists():
-        return {"precision": None, "recall": None, "n_cases": 0}
-    tp = fp = fn = n = 0
-    for line in path.read_text(encoding="utf-8").splitlines():
-        c = json.loads(line)
-        s = dict(c["last_seen"])
-        s["ts"] = datetime.fromisoformat(s["ts"])
-        s["last_message_at"] = datetime.fromisoformat(s["last_message_at"])
-        got = bool(find_dark_candidates([LastSeen(**s)], c["coverage"], set(c["alive"]),
-                                        [tuple(a) for a in c["airports"]], datetime.fromisoformat(c["now"])))
+CURRENT_RULES = rules_version()
+
+
+def _replay(case: dict) -> bool:
+    s = dict(case["last_seen"])
+    s["ts"] = datetime.fromisoformat(s["ts"])
+    s["last_message_at"] = datetime.fromisoformat(s["last_message_at"])
+    return bool(find_dark_candidates([LastSeen(**s)], case["coverage"], set(case["alive"]),
+                                     [tuple(a) for a in case["airports"]],
+                                     datetime.fromisoformat(case["now"])))
+
+
+def _score_cases(cases: list[dict]) -> dict:
+    tp = fp = fn = 0
+    for c in cases:
+        got = _replay(c)
         tp += got and c["expected"]
         fp += got and not c["expected"]
         fn += (not got) and c["expected"]
-        n += 1
-    return {**prf(tp, fp, fn), "n_cases": n}
+    return {**prf(tp, fp, fn), "n_cases": len(cases)}
+
+
+def eval_d1(path: Path, current: str = CURRENT_RULES) -> dict:
+    """D1 on labelled cases, kept apart by the thresholds that produced them.
+
+    A labelled case is a snapshot of the world PLUS the configuration that decided what got sampled:
+    silent_aircraft() only offers min_gap..max_gap to be labelled, so moving a threshold changes the
+    population, not just the verdict. Averaging cases from before and after such a move produces one
+    number that describes neither configuration, and the gate then compares that mixture with a
+    baseline measured on something else.
+
+    So the headline metrics cover only the current thresholds, and everything else is reported beside
+    them under `by_rules` instead of being folded in or silently dropped. Cases with no
+    `rules_version` are hand-written rule scenarios (the synthetic regression set) rather than
+    captured snapshots - they carry no configuration because no configuration chose them, and they
+    always count.
+    """
+    if not path.exists():
+        return {"precision": None, "recall": None, "n_cases": 0}
+
+    buckets: dict[str, list[dict]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        c = json.loads(line)
+        buckets.setdefault(c.get("rules_version") or current, []).append(c)
+
+    biezace = buckets.get(current, [])
+    out = {**_score_cases(biezace), "rules_version": current}
+    stare = {wersja: _score_cases(cases) for wersja, cases in sorted(buckets.items()) if wersja != current}
+    if stare:
+        out["by_rules"] = stare
+        out["n_other_rules"] = sum(w["n_cases"] for w in stare.values())
+        if not biezace:
+            # Sa etykiety, ale zadna spod obecnych progow. prf() na zerze liczy 1,0 - i wtedy zmiana
+            # progu przechodzilaby bramke z kompletem punktow za pomiar, ktorego nikt nie wykonal.
+            # "Brak pomiaru" musi wygladac jak brak pomiaru, a bramka traktuje None jako spadek.
+            out["precision"] = out["recall"] = None
+    return out
 
 
 CARGO = {"Cargo", "Tanker"}
@@ -120,6 +163,26 @@ def eval_regression() -> dict:
     return out
 
 
+def metric_drops(base: dict, results: dict) -> list[str]:
+    """Metrics that fell more than TOLERANCE below the baseline - or stopped existing.
+
+    A metric that came back None counts as a drop, not as a pass. That is the case that shows up
+    after a threshold change: the baseline was measured under the old rules, every labelled case now
+    belongs to another configuration, and there is no measurement under the current one. Treating
+    "nothing to compare" as "nothing got worse" would wave exactly that change through.
+    """
+    out = []
+    for d in base:
+        if d == "regresja":
+            continue
+        for m in ("precision", "recall"):
+            oczekiwane = base[d].get(m)
+            teraz = results.get(d, {}).get(m)
+            if oczekiwane is not None and (teraz is None or teraz < oczekiwane - TOLERANCE):
+                out.append(f"{d}.{m}: {oczekiwane} -> {teraz}")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", type=Path)
@@ -136,10 +199,7 @@ def main() -> int:
     print(json.dumps(results, indent=2))
     if args.check:
         base = json.loads(args.check.read_text(encoding="utf-8"))
-        drops = [f"{d}.{m}: {base[d][m]} -> {results[d][m]}"
-                 for d in base if d != "regresja" for m in ("precision", "recall")
-                 if base[d].get(m) is not None
-                 and (results[d][m] is None or results[d][m] < base[d][m] - TOLERANCE)]
+        drops = metric_drops(base, results)
         # Regresja porownuje sie doslownie. Nie ma tu tolerancji, bo nie ma metryki, ktora moglaby
         # "troche spasc": albo detektor widzi na zamrozonych danych to samo, albo cos sie zmienilo.
         zmiany = []
