@@ -6,6 +6,10 @@ x-db-env: &db-env
 services:
   db:
     image: timescale/timescaledb-ha:pg17
+    # Baza i front wstaja same po restarcie komputera. Bez tego caly stos byl martwy do czasu, az
+    # ktos recznie wpisal "docker compose up" - a aplikacja, ktora trzeba codziennie reanimowac,
+    # nie nadaje sie do ogladania ani analizowania.
+    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: wachta
@@ -50,6 +54,7 @@ services:
 
   web:
     build: { context: ., dockerfile: infra/docker/web.Dockerfile }
+    restart: unless-stopped
     # Port na hoscie zmienisz przez WACHTA_WEB_PORT w .env; 8081 bywa zajete przez inne narzedzia.
     ports: ["${WACHTA_WEB_PORT:-8081}:80"]
     depends_on: [api]
