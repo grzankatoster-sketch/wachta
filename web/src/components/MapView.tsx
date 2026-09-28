@@ -15,6 +15,8 @@ interface Props {
   layers: Layer[];
   viewState?: MapViewState;
   onViewStateChange?: (v: MapViewState) => void;
+  /** Klikniety obiekt, albo null przy kliknieciu w pusta mape - to drugie zamyka panel. */
+  onObjectClick?: (object: unknown) => void;
 }
 
 function tooltip({ object }: PickingInfo) {
@@ -24,7 +26,7 @@ function tooltip({ object }: PickingInfo) {
   return null;
 }
 
-export function MapView({ layers, viewState, onViewStateChange }: Props) {
+export function MapView({ layers, viewState, onViewStateChange, onObjectClick }: Props) {
   return (
     <DeckGL
       initialViewState={viewState ? undefined : BALTIC_VIEW}
@@ -33,6 +35,11 @@ export function MapView({ layers, viewState, onViewStateChange }: Props) {
       controller
       layers={layers}
       getTooltip={tooltip}
+      // getTooltip reaguje na NAJECHANIE, nie na klik - bez tego nic nie da sie kliknac, i
+      // dokladnie tak wygladalo to dla pierwszej osoby, ktora otworzyla aplikacje.
+      onClick={(info) => onObjectClick?.(info.object ?? null)}
+      getCursor={({ isDragging, isHovering }) =>
+        isDragging ? "grabbing" : isHovering ? "pointer" : "grab"}
     >
       <Map mapStyle={STYLE} />
     </DeckGL>

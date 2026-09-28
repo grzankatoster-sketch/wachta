@@ -5,6 +5,7 @@ import { AlertsPanel } from "./components/AlertsPanel";
 import { BALTIC_VIEW, MapView } from "./components/MapView";
 import { ReplayBar } from "./components/ReplayBar";
 import { SearchPanel } from "./components/SearchPanel";
+import { DetailPanel } from "./components/DetailPanel";
 import { Warstwy } from "./components/Warstwy";
 import { SourcesFooter } from "./components/SourcesFooter";
 import { aircraftLayers } from "./layers/aircraft";
@@ -13,6 +14,7 @@ import { jammingLayer } from "./layers/jamming";
 import { tripsLayer } from "./layers/trips";
 import { useLive } from "./live";
 import { replayBounds, toTrips, type Trip } from "./replay";
+import { selectionFromPicked, zbudujSzczegoly, type Selection } from "./detail";
 import { stanDanych, WSZYSTKO_WIDOCZNE, type Widoczne } from "./warstwy";
 
 export default function App() {
@@ -23,6 +25,7 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [widoczne, setWidoczne] = useState<Widoczne>(WSZYSTKO_WIDOCZNE);
+  const [wybrany, setWybrany] = useState<Selection | null>(null);
 
   useEffect(() => {
     getJSON<AlertDto[]>("/api/alerts").then(setAlerts).catch(() => undefined);
@@ -76,7 +79,13 @@ export default function App() {
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
-      <MapView layers={layers} viewState={view} onViewStateChange={setView} />
+      <MapView
+        layers={layers}
+        viewState={view}
+        onViewStateChange={setView}
+        onObjectClick={(o) => setWybrany(selectionFromPicked(o))}
+      />
+      {wybrany && <DetailPanel szczegoly={zbudujSzczegoly(wybrany)} onClose={() => setWybrany(null)} />}
       <AlertsPanel alerts={alerts} onSelect={(a) => setView({ ...view, longitude: a.lon, latitude: a.lat, zoom: 8 })} />
       <SearchPanel />
       <header className="naglowek">

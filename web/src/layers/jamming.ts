@@ -10,6 +10,8 @@ export function jammingLayer(cells: JammingDto[]) {
     getFillColor: (c) => jammingColor(c.nDegraded / c.nAircraft),
     extruded: false,
     stroked: false,
-    pickable: false,
+    // Klikniecie w heksagon ma otworzyc panel szczegolow (co to jest / co z tego wynika / na jakiej
+    // podstawie) - deck.gl nie zglasza klikniec z warstwy, ktora nie jest pickable.
+    pickable: true,
   });
 }

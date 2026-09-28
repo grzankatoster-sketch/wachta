@@ -10,6 +10,7 @@ export interface AlertDto {
 export interface JammingDto { h3: string; nAircraft: number; nDegraded: number }
 export interface ReplayPath { hex: string; flight: string | null; typeCode: string | null; path: [number, number][]; timestamps: number[] }
 export interface SourceInfo { id: string; name: string; url: string; license: string; trustTier: number; attribution: string }
+export interface TrackPoint { ts: string; lat: number; lon: number; altBaroFt: number | null }
 
 /** Free-form jsonb: every detector writes its own shape, so every field is optional and unknown
  * keys are allowed. Reading it as one fixed shape is what made maritime alerts render as "?". */
@@ -25,6 +26,23 @@ export interface AlertEvidence {
   line_name?: string;
   listeners?: number;
   implied_kt?: number;
+  // Pola dopisane dla panelu szczegolow (DetailPanel) - detektory D1/D4/D6 zapisuja je w evidence,
+  // ale wczesniejszy odczyt (alert-text.ts) ich nie potrzebowal.
+  verdict?: string;               // D4: czy cisza nalezy do statku, czy do odbioru
+  motion?: string;                // D4: czy statek plynal, stal, czy dane sa niemozliwe
+  simultaneous?: number;          // D4: ile innych statkow zamilklo rownoczesnie w tej kratce
+  vanish_lat?: number;
+  vanish_lon?: number;
+  resume_lat?: number;
+  resume_lon?: number;
+  nearest_airport_km?: number;    // D1
+  cell_reports?: number;          // D1: ile zgloszen normalnie pada z tej komorki pokrycia
+  line_kind?: string;             // D6: rodzaj linii (kabel, gazociag...)
+  mean_sog_kn?: number;           // D6: srednia predkosc w wezlach podczas przebiegu
+  max_distance_km?: number;       // D6
+  course_spread_deg?: number;     // D6: rozrzut kursu - im wiekszy, tym bardziej "wleczony"
+  fixes?: number;                 // D6: liczba pozycji w podejrzanym przebiegu
+  note?: string;                  // wspolna adnotacja detektorow: "kandydat do sprawdzenia, nie wyrok"
   [inne: string]: unknown;
 }
 
@@ -74,6 +92,17 @@ export interface SearchResult {
  */
 export async function search(query: string, kind?: string, limit = 8): Promise<SearchResult> {
   return getJSON<SearchResult>(`/api/search?${zapytanie(query, kind, limit)}`);
+}
+
+/**
+ * Reads one aircraft's recent track from `/api/aircraft/{hex}/track`.
+ *
+ * The endpoint requires both `from` and `to` (400 without them) and rejects a window over 24 h, so
+ * this wrapper always sends both and lets a too-wide window fail loudly rather than silently.
+ */
+export async function getAircraftTrack(hex: string, from: Date, to: Date): Promise<TrackPoint[]> {
+  const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+  return getJSON<TrackPoint[]>(`/api/aircraft/${encodeURIComponent(hex)}/track?${qs}`);
 }
 
 export async function getJSON<T>(path: string): Promise<T> {

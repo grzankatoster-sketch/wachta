@@ -283,3 +283,18 @@ body {
 /* Panel alarmow schodzi pod legende. Kolejnosc od gory jest kolejnoscia czytania: czym to jest,
    co na tym widac, co system znalazl. */
 .panel { top: auto; bottom: 56px; max-height: 38vh; }
+
+/* Panel szczegolow wchodzi z prawej i zajmuje to samo miejsce co wyszukiwanie. Zamiast go
+   przykrywac - odsuwamy szukanie, zeby oba byly czytelne. Klikniecie w obiekt jest w tym momencie
+   wazniejsze niz pole wyszukiwania, ale ukrywanie go zupelnie zabieraloby punkt odniesienia. */
+body:has([role="dialog"]) .szukaj {
+  /* 380 px szerokosci panelu + 36 px jego dopelnienia (styl inline, content-box) + odstep.
+     Pierwsza wersja liczyla samo 380 i zostawal 20-pikselowy zaklad. */
+  right: calc(min(416px, 96vw) + 16px);
+  max-height: calc(100vh - 140px);
+}
+
+/* Na waskim ekranie oba na raz sie nie mieszcza - wtedy szukanie ustepuje. */
+@media (max-width: 1280px) {
+  body:has([role="dialog"]) .szukaj { display: none; }
+}
