@@ -99,3 +99,123 @@ def insert_alerts(conn: psycopg.Connection, detector: str, candidates: list[Dark
         )
         inserted += cur.rowcount
     return inserted
+
+
+# --- Odczyt dla serwera MCP -------------------------------------------------
+# Model pyta o stan biezacy, nie o przeliczanie detektorow, wiec te funkcje tylko czytaja i zawsze
+# dostaja limit z gory. Limit jedzie jako parametr zapytania, a nie w sklejonym napisie - inaczej
+# argument od modelu trafialby do SQL-a jako tekst do wykonania.
+
+LIVE_AIRCRAFT_COLUMNS = ("hex", "flight", "type_code", "is_military", "lat", "lon",
+                         "alt_baro_ft", "gs_kt", "track_deg", "nac_p", "ts")
+JAMMING_COLUMNS = ("hour", "h3", "n_aircraft", "n_degraded")
+ALERT_COLUMNS = ("detector", "entity_id", "started_at", "lat", "lon", "score", "state",
+                 "created_at", "evidence")
+TRACK_COLUMNS = ("ts", "lat", "lon", "alt_baro_ft", "gs_kt", "track_deg", "nac_p", "on_ground")
+
+
+def _dicts(rows, columns: tuple[str, ...]) -> list[dict]:
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def live_aircraft(conn: psycopg.Connection, since: datetime, limit: int) -> list[dict]:
+    """Newest position of each aircraft heard since `since`, freshest first."""
+    rows = conn.execute(
+        """
+        SELECT hex, flight, type_code, is_military, lat, lon, alt_baro_ft, gs_kt, track_deg, nac_p, ts
+        FROM (
+            SELECT DISTINCT ON (hex) hex, flight, type_code, is_military, lat, lon, alt_baro_ft,
+                   gs_kt, track_deg, nac_p, ts
+            FROM aircraft_position
+            WHERE ts >= %s
+            ORDER BY hex, ts DESC
+        ) ostatnie
+        ORDER BY ts DESC
+        LIMIT %s
+        """,
+        (since, limit),
+    ).fetchall()
+    return _dicts(rows, LIVE_AIRCRAFT_COLUMNS)
+
+
+def position_window(conn: psycopg.Connection, since: datetime) -> dict:
+    """How much data the window actually holds and how old it is - the answer must say so itself.
+
+    A stack started ten minutes ago looks exactly like a quiet sky. Counting separately from the
+    limited listing is what lets the answer say "3 rows shown out of 812" rather than implying 3.
+    """
+    row = conn.execute(
+        """SELECT count(DISTINCT hex), count(*), min(ts), max(ts)
+           FROM aircraft_position WHERE ts >= %s""",
+        (since,),
+    ).fetchone()
+    return dict(zip(("n_aircraft", "n_positions", "oldest", "newest"), row))
+
+
+def jamming_cells_since(conn: psycopg.Connection, since: datetime, limit: int) -> list[dict]:
+    """GPS interference cells computed for the hours from `since` on, worst share first."""
+    rows = conn.execute(
+        """SELECT hour, h3, n_aircraft, n_degraded FROM jamming_cell
+           WHERE hour >= %s
+           ORDER BY n_degraded::float / NULLIF(n_aircraft, 0) DESC NULLS LAST, hour DESC
+           LIMIT %s""",
+        (since, limit),
+    ).fetchall()
+    return _dicts(rows, JAMMING_COLUMNS)
+
+
+def jamming_window(conn: psycopg.Connection, since: datetime) -> dict:
+    row = conn.execute(
+        """SELECT count(*), min(hour), max(hour) FROM jamming_cell WHERE hour >= %s""",
+        (since,),
+    ).fetchone()
+    return dict(zip(("n_cells", "oldest", "newest"), row))
+
+
+def recent_alerts(conn: psycopg.Connection, since: datetime, limit: int,
+                  detector: str | None = None) -> list[dict]:
+    """Detector alerts raised since `since`, newest first; `detector` None means all of them.
+
+    The optional filter is still a bound parameter - `%s IS NULL` inside the WHERE clause instead of
+    a clause assembled in Python, so no caller can shape the statement by choosing a detector name.
+    """
+    rows = conn.execute(
+        """SELECT detector, entity_id, started_at, lat, lon, score, state, created_at, evidence
+           FROM alert
+           WHERE created_at >= %s AND (%s::text IS NULL OR detector = %s::text)
+           ORDER BY created_at DESC
+           LIMIT %s""",
+        (since, detector, detector, limit),
+    ).fetchall()
+    return _dicts(rows, ALERT_COLUMNS)
+
+
+def alert_window(conn: psycopg.Connection, since: datetime, detector: str | None = None) -> dict:
+    row = conn.execute(
+        """SELECT count(*), min(created_at), max(created_at) FROM alert
+           WHERE created_at >= %s AND (%s::text IS NULL OR detector = %s::text)""",
+        (since, detector, detector),
+    ).fetchone()
+    return dict(zip(("n_alerts", "oldest", "newest"), row))
+
+
+def aircraft_track(conn: psycopg.Connection, hex_: str, since: datetime, limit: int) -> list[dict]:
+    """Track of one aircraft since `since`, newest point first."""
+    rows = conn.execute(
+        """SELECT ts, lat, lon, alt_baro_ft, gs_kt, track_deg, nac_p, on_ground
+           FROM aircraft_position
+           WHERE hex = %s AND ts >= %s
+           ORDER BY ts DESC
+           LIMIT %s""",
+        (hex_, since, limit),
+    ).fetchall()
+    return _dicts(rows, TRACK_COLUMNS)
+
+
+def aircraft_summary(conn: psycopg.Connection, hex_: str, since: datetime) -> dict:
+    row = conn.execute(
+        """SELECT count(*), min(ts), max(ts), max(flight), max(type_code), bool_or(is_military)
+           FROM aircraft_position WHERE hex = %s AND ts >= %s""",
+        (hex_, since),
+    ).fetchone()
+    return dict(zip(("n_points", "oldest", "newest", "flight", "type_code", "is_military"), row))
