@@ -483,6 +483,365 @@ kandydat naprawde widzial jakis SDK, a nie tylko istnial.
 
 Pelny przebieg `scripts/check.ps1`: **WSZYSTKO ZIELONE**.
 
+## Audyt Codeksa i siedem napraw (2026-09-27)
+
+Router skierowal audyt architektury do modelu lokalnego w trybie `debug` z pewnoscia **0,35** (qwen
+wpadl w timeout, zeszlo na zapasowy TF-IDF). To zadanie jest na liscie wprost wykluczonych dla
+modelu lokalnego - **piaty udokumentowany blad skierowania**. Poszlo zgodnie z polityka: ciezki
+odczyt do Codeksa, synteza i decyzje u Claude.
+
+Codex zwrocil **24 znaleziska: 7 HIGH, 13 MED, 4 LOW**, najgesciej w `sts.py` (6) i `gaps.py` (4) -
+czyli w kodzie pisanym najszybciej. Kazde HIGH odtworzylem sam przed przyjeciem; **kazda poprawka
+ma test dowiedziony mutacja**.
+
+| co bylo nie tak | dlaczego to bolalo |
+|---|---|
+| `sanctions.py` - kategoryzacja na liscie **wykluczen** | kazdy nieznany wykaz (nowy zbior, literowka) awansowal statek do "sankcjonowanego". Ta sama klasa bledu, ktora ta kategoryzacja miala naprawic |
+| `identity.py` - zerowy czas dawal 0 wezlow | dwie pozycje w tej samej sekundzie 300 km od siebie byly "spojne". Wyrzucalem najmocniejszy mozliwy dowod, zeby nie dzielic przez zero |
+| `sts.py` - brak pola SOG znaczyl "wolno" | statek pedzacy **21,6 w.** liczyl sie jako stojacy przez 79 minut i mogl utworzyc falszywa pare |
+| `sts.py` - staly zasieg siatki | na 75 stopniu para odlegla o 0,63 km znikala przy limicie 0,8 km. **Ten sam blad naprawialem juz w `spatial_index.py`** i powtorzylem go w nowym module |
+| `dark_sts.py` - okno z calej ciszy | zglaszalo spotkania, na ktore zgaszony statek zdazylby dopiero po koncu postoju. Okno liczy sie teraz od chwili mozliwego przybycia do chwili, w ktorej trzeba juz ruszac |
+| `dark_sts.py` - wykluczanie calego MMSI | jedno bunkrowanie rano skreslalo statek na cala dobe i moglo ukryc niezalezny ciemny przeladunek wieczorem |
+| `gaps.py` - licznik awarii z samych kandydatow | statki stojace pod stacja nie przechodzily filtru ruchu, wiec padajaca stacja cichla "tylko jednemu" statkowi, a jego cisza dostawala etykiete dzialajacego odbioru |
+
+Po naprawach: **235 testow**, bramka regresji bez zmian, a wynik D4 na prawdziwej dobie **przezyl** -
+te same cztery przypadki, w tym STANISLAV GOVORUKHIN. Zmienila sie jedna klasyfikacja: przypadek,
+ktory wczesniej byl bledny, jest teraz rozpoznany jako awaria odbioru.
+
+Dwie rzeczy warte zapamietania. Po pierwsze, **dwa razy powtorzylem wlasny wczesniejszy blad** -
+zasieg siatki wedlug szerokosci geograficznej i domyslne przyjmowanie mocniejszego twierdzenia przy
+braku danych. Po drugie, pierwsza wersja testu na okno czasowe **przechodzila rowniez na starym
+kodzie** - odrzucal go inny warunek. Gdybym nie zmutowal, dopisalbym test, ktory niczego nie pilnuje.
+
+## Warstwa AI - wyszukiwanie po znaczeniu i analityk RAG (2026-09-27)
+
+To byl punkt 1 audytu: z jedenastu wymagan oferty szesc nie istnialo w kodzie. Ta czesc domyka
+cztery z nich - **LLM, RAG, GenAI i baze wektorowa** - i robi to na prawdziwym korpusie, nie na
+przykladzie.
+
+**Embeddingi** (`embeddings.py`): model `bge-m3` na lokalnej Ollamie, 1024 wymiary, nic nie wychodzi
+z maszyny. Zmierzone: polskie zdanie i jego angielski odpowiednik daja **0,724**, zdanie bez zwiazku
+**0,274**. To jest cala racja bytu tej warstwy - korpus jest po angielsku, rosyjsku i ukrainsku, a
+pytania zadaje sie po polsku.
+
+**Sklep wektorowy** (`vector_store.py`): jeden protokol, dwie implementacje - w pamieci (testy, CI,
+brak bazy) i pgvector (produkcja). Migracja `0005_embeddings.sql` z indeksem HNSW po odleglosci
+kosinusowej. Filtr metadanych dziala PRZED wyborem sasiadow, bo filtrowanie po wyborze k najblizszych
+cicho zwraca mniej wynikow, czasem zero.
+
+**Prog odciecia jest zmierzony, nie zgadniety.** Na 600 zdarzeniach GDELT pytania sensowne trafialy
+z wynikiem 0,570-0,782, pytania bez zwiazku z korpusem 0,354-0,445. Prog 0,50 lezy w tej luce.
+Dzieki temu na pytanie o statki i kable podmorskie analityk odpowiada "brak danych" zamiast podac
+najblizszego sasiada - a najblizszy sasiad istnieje **zawsze**, takze gdy nic nie pasuje.
+
+**Analityk RAG** (`analyst.py`) ma dwie bramki, obie mechaniczne:
+- **cytowan** - zdanie bez odnosnika albo z odnosnikiem do nieistniejacego faktu wypada;
+- **liczb** - kazda liczba w zdaniu musi wystepowac w cytowanym fakcie.
+
+Druga powstala dlatego, ze pierwsza sama **przepuszczala przekrecenia**: na wlasnym wyjsciu tego
+projektu przeszlo zdanie mowiace, ze danych o wsparciu brak, tuz obok podanej kwoty, oraz przypisanie
+wynikow z wod dunskich Zatoce Finskiej. Na zywym przebiegu bramka liczb zlapala zdanie "Dane te
+pochodza z lacznie 23 doniesien" - suma, ktorej zaden pojedynczy fakt nie potwierdza.
+
+### Pomiar, ktory najwiecej nauczyl
+
+Pierwsza wersja skryptu doklejala do kazdego dokumentu "(opisane w N doniesieniach)". Wygladalo
+niewinnie. Zmierzone:
+
+| pytanie | bez dopisku | z dopiskiem |
+|---|---|---|
+| co sie dzieje w Iranie? | 0,619 | **0,498** |
+| co z Ukraina? | 0,582 | **0,500** |
+| protesty w Teheranie | 0,782 | 0,628 |
+
+Ten sam tekst w kazdym dokumencie dodaje wszystkim **wspolny kierunek** i rozciencza to, czym
+dokumenty sie roznia - spadek 0,12-0,15 i dwa z trzech pytan pod progiem. Analityk odpowiadal
+"brak danych" na pytanie o Iran, majac w korpusie 173 zdarzenia z Teheranu. **W RAG tresc dokumentu
+wazy wiecej niz model i prog razem wziete.** Liczba doniesien jest teraz w metadanych, ktore nie ida
+do modelu.
+
+### Czego ta warstwa nie umie
+
+- **Bramka liczb widzi tylko cyfry.** "siedmiu zabitych" przechodzi bez sprawdzenia, bo to slowo.
+- Ocena jakosci wyszukiwania opiera sie na moim odczycie kilkunastu pytan, nie na zbiorze etykiet.
+- `DeterministicEmbedder` w testach sprawdza hydraulike (kolejnosc, filtry, progi) i **nic** nie mowi
+  o znaczeniu. Kazdy wynik nim uzyskany jest bez wartosci dla oceny trafnosci.
+- Indeks zyje w pamieci procesu; `PgVectorStore` jest napisany i nieuruchomiony, bo nie ma bazy.
+
+## Serwer MCP - detektory jako narzedzia modelu (2026-09-27)
+
+Piate z szesciu brakujacych wymagan: **Agentic AI**. Model nie dostaje streszczenia tego, co
+detektory znalazly - dostaje **narzedzia**, ktorymi pyta sam i sam decyduje, o co. Pelny opis:
+[MCP.md](MCP.md).
+
+Dziala jako proces mowiacy po stdio (JSON-RPC 2.0). Sprawdzone rozmowa z prawdziwym procesem:
+handshake, `tools/list` z siedmioma narzedziami, `tools/call` zwracajacy dane z detektora D4,
+nieznane narzedzie odrzucone z lista dostepnych, powiadomienie bez odpowiedzi.
+
+**Protokol napisany wprost, bez SDK.** Cztery istotne metody mieszcza sie w jednym pliku, sa w
+calosci przetestowane (22 testy) i nie wnosza zaleznosci do CI. Gdyby doszly zasoby albo probkowanie,
+SDK zacznie sie oplacac - przy siedmiu narzedziach nie.
+
+Dwie decyzje warte nazwania:
+
+- **Narzedzie, ktore sie wywroci, zwraca blad NARZEDZIA, nie protokolu.** Blad JSON-RPC znaczy
+  "wywolanie bylo niepoprawne"; padajacy detektor znaczy "wywolanie zadzialalo, a odpowiedzia jest
+  niepowodzenie" - i model musi umiec to przeczytac, zeby sprobowac czegos innego.
+- **Powiadomienie nie dostaje odpowiedzi w ogole.** Odpowiedz na nie lamie protokol; czesc klientow
+  to toleruje, czesc sie zawiesza.
+
+### Zasada, na ktorej to stoi
+
+Kazda odpowiedz niesie **wlasne zastrzezenie**. Nie z grzecznosci: model dostajacy liste
+"podejrzanych statkow" opisze je jako podejrzane statki. Ten sam model, dostajac razem z lista
+zdanie "awaria transpondera wyglada w danych identycznie", zwykle je powtorzy. Test
+`test_every_real_tool_answer_carries_its_own_caveat` pilnuje, zeby zadne narzedzie nie oddalo danych
+bez tego zdania.
+
+### Czego nie robi
+
+- Nie liczy detektorow na zywo - czyta migawki, i kazda odpowiedz podaje, z kiedy sa dane.
+- Wersja na zywo wymaga bazy, ktorej nie ma.
+- Nie sprawdzilem go z prawdziwym klientem MCP, tylko wlasnym klientem testowym mowiacym tym samym
+  protokolem. To nie to samo co zgodnosc z Claude Code w praktyce.
+
+## Model ML dla D3 - ostatnie brakujace wymaganie (2026-09-27)
+
+Zaczalem od sprawdzenia, czy jest na czym trenowac, bo model uczony na etykietach z wlasnej reguly
+uczylby sie tylko tej reguly. Pierwsza odpowiedz byla **nie**: 8 przykladow pozytywnych i 22
+negatywne. Na trzydziestu przykladach nie trenuje sie niczego.
+
+Ale ograniczeniem nie byly etykiety, tylko **moje pokrycie**. gpsjam etykietuje caly swiat: na dobie
+2026-09-26 daje 356 komorek zakloconych i 21835 spokojnych. Brakowalo wlasnych obserwacji z tych
+miejsc.
+
+Pierwsza proba - jeden szeroki odczyt nad 28 okregami - dala **zero** komorek pozytywnych: 1571
+samolotow rozlozone na 845 komorek to okolo dwoch na komorke, a z dwoch samolotow nie liczy sie
+udzialu. Przy okazji wyszlo, ze adsb.lol odmawia (429) takze przy odstepie 2,5 s, czyli ogranicza
+**czestotliwosc**, nie tylko rownoczesnosc - wczesniejsza notatka w SOURCES.md byla niepelna.
+
+Po **12 przelotach przez 50 minut** (270 zapytan udanych, 58 odmow, odstep regulowany
+automatycznie) zebralem **32 375 obserwacji** zamiast 1571. Razem z godzina nad Baltykiem daje to
+**2119 komorek z etykieta, 121 zakloconych, 105 grup przestrzennych**.
+
+### Jak jest mierzone
+
+- **Podzial przestrzenny, nie losowy.** Sasiednie komorki H3 dziela samoloty i dziela to, co je
+  zaklocia, wiec losowy podzial pokazalby modelowi jego wlasny zbior testowy. Komorki sa grupowane
+  po rodzicu res 2 i cale grupy ida do jednego foldu.
+- **Dokladnosc nie jest raportowana w ogole.** Przy 121 zakloconych na 2119 przewidywanie
+  "spokojnie" wszedzie daje 94% i nie znaczy nic.
+- **Regula liczona na tych samych foldach.** Inaczej porownanie byloby nieuczciwe.
+- **Prog "zaklocone" identyczny jak w regule** (nac_p < 8). Inny prog i porownanie nie mowiloby nic
+  o modelu.
+
+### Wynik
+
+| | precyzja | czulosc | AP |
+|---|---|---|---|
+| regula (Wilson >= 0,10) | 0,857 | 0,347 | - |
+| model, wszystkie cechy | 0,737 | 0,579 | 0,689 |
+| **model (bez cech gestosci)** | **0,769** | **0,579** | **0,705** |
+
+**Model wymienia precyzje na czulosc**: znajduje o 23 pkt proc. wiecej zakloconych komorek, placac
+9 pkt proc. precyzji. Nie oglaszam tego zwyciestwem - ktora strona tej wymiany jest lepsza, zalezy
+od tego, co kosztuje falszywy alarm, a tego skrypt nie wie.
+
+### Test, ktory mogl to uniewaznic
+
+Przy mniejszej probie trzy najwazniejsze cechy dotyczyly sasiedztwa, w tym `neighbour_aircraft` -
+zwykla gestosc ruchu. To moglo znaczyc, ze model uczy sie **geografii**, a nie zaklocen.
+
+Ablacja bez cech gestosci wypadla **lepiej** niz model pelny (precyzja 0,769 zamiast 0,737, AP 0,705
+zamiast 0,689). Czyli te cechy nie tylko nie niosly sygnalu - lekko szkodzily. Raportowanym modelem
+jest wiec ten prostszy. To nie jest dobieranie wariantu pod wynik testowy: ablacja byla hipoteza
+postawiona **zanim** zobaczylem liczby.
+
+Najwazniejsze cechy po ablacji to `mean_nac_p` (jak zle jest, nie tylko ze jest), `spread_alt_ft`
+i `neighbour_share` - czyli udzial zakloconych w pierscieniu, ktorego regula z definicji nie widzi,
+bo patrzy na jedna komorke naraz.
+
+Te liczby **nie sa porownywalne** z wczesniejszymi 0,60/0,75 dla D3: inny zbior, inna doba etykiet,
+inny prog minimalnej liczby samolotow.
+
+### Czego to nie rozstrzyga
+
+- 121 przykladow pozytywnych to nadal malo; przedzialy ufnosci sa szerokie i nie licze ich.
+- Etykiety gpsjam sa z calej doby, moj pomiar z jednej godziny i jednego szerokiego odczytu -
+  zgodnosc jest z natury czesciowa.
+- Model nie jest nigdzie wdrozony. Regula dalej jest tym, co liczy mape i bramke.
+
+## Zalegle znaleziska MED z audytu (2026-09-27)
+
+Szesc z trzynastu, wybrane po wplywie na **opublikowane liczby**, nie po latwosci. Kazde odtworzone
+przed przyjeciem, kazda poprawka z testem dowiedzionym mutacja.
+
+**1. Sankcje: liczyl sie tylko pierwszy wiersz z pliku.** OpenSanctions publikuje wiersz na wpis, nie
+na statek - 5976 kadlubow ma wiecej niz jeden wiersz na ten sam numer IMO. `setdefault` zachowywal
+pierwszy, wiec wynik zalezal od kolejnosci w CSV. Zmierzone: w **484 przypadkach** pierwszy wiersz
+nie mial sankcji, a pozniejszy mial. Po scaleniu rekordow liczba statkow Zatoki Finskiej na listach
+sankcyjnych: **51 -> 59**. Osiem statkow bylo pokazywanych jako tylko skontrolowane.
+
+**2. Anomalie: okno biezace nie mialo gornej granicy.** Znacznik z przyszlosci - zegar zrodla, blad
+parsowania, zastepcze poludnie - wpadal do biezacego okna. Osiem takich zdarzen wystarczylo, zeby
+samo wywolalo alarm.
+
+**3. Dwie wersje: kazda wzmianka liczyla sie jako osobny artykul.** GDELT wystawia wiersz na kazda
+WZMIANKE, wiec ten sam tekst wraca kilka razy - podwaja wplyw na srednia, przepycha strone przez
+`min_articles` i **kasuje ostrzezenie o cienkiej podstawie**, czyli dokladnie to, co mialo chronic
+czytelnika. Teraz jeden adres to jeden glos.
+
+**4. Indeks przestrzenny: `nearest(max_km=None)` przeszukiwal jeden pierscien kratek.** Zwracal
+`None` tam, gdzie funkcja globalna znajdowala linie 1322 km dalej. Bez promienia pytanie brzmi "co
+jest najblizej na swiecie" i uczciwiej przejsc wszystko, niz udawac, ze nic nie ma.
+
+**5. Tor wyscigowy: rownomierny okrag przepadal.** Brak dominujacej osi konczyl analize przed
+sprawdzeniem krazenia - a rownomierny rozklad kierunkow to wlasnie pelna orbita. Najczystszy okrag
+byl jedynym ksztaltem, ktorego detektor nie widzial.
+
+**6. Wleczenie kotwicy: odcinek nie konczyl sie po dziurze w meldunkach.** Piec pozycji co godzine
+skladalo sie w "czterogodzinny alarm", choc o tym, co statek robil miedzy nimi, dane nie mowia nic.
+Doszedl `max_gap` 20 min i rozdzielanie odcinkow miedzy roznymi liniami - alarm ma dotyczyc jednego
+kabla, nie tego, ze statek mijal kilka. Wynik na dobie dunskiej: **35 -> 33 alarmy**, liczba dla
+statkow handlowych bez zmian (1).
+
+Testy: **319**. Bramka regresji bez zmian.
+
+### Wlasny blad w fiksturach
+
+Poprawka nr 3 wywrocila istniejacy test - bo moj pomocnik `row()` dawal wszystkim wierszom **ten sam
+adres artykulu**. Wczesniej bylo to nieszkodliwe; po dodaniu odsiewu powtorzen dwa rozne zrodla
+wygladaly jak jeden tekst policzony dwa razy. Poprawilem fikstury, nie regule.
+
+### Co zostaje
+
+Siedem znalezisk MED i cztery LOW, glownie w `run.py` (atomowosc zapisu, znacznik przetworzonych
+godzin) i `dark.py` (snapshot nie zapisuje wersji regul). Wszystkie dotycza potoku, ktory nie
+zostal jeszcze uruchomiony z baza, wiec nie zmieniaja zadnej opublikowanej liczby.
+
+## Bramka analityka dala sie oszukac (2026-09-28)
+
+Na zywym przebiegu, pytana o Iran, bramka przyjela **8 z 9 zdan i ogłosila 89% przyjetych**. Notatka
+wygladala tak:
+
+```
+[1] Brak danych na temat sytuacji w Iranie.
+[2] Brak danych na temat sytuacji w Iranie.
+...          <- osiem razy to samo, zmienial sie tylko numer
+[8]          <- samo odniesienie, bez zdania
+```
+
+Kazde z tych "zdan" ma poprawny odnosnik i nie zawiera zadnej liczby, wiec obie dotychczasowe bramki
+- cytowan i liczb - przepuscily je bez zastrzezen. Model pomylil format i przepisal numeracje listy
+faktow, a moja bramka nazwala to notatka w 89% wiarygodna.
+
+Doszly dwie reguly, obie mechaniczne:
+
+- **odnosnik bez tresci** - zdanie musi miec co najmniej trzy slowa poza odnosnikami. "[8]" nie jest
+  zdaniem;
+- **powtorzenie** - porownywana jest TRESC zdania z pominieciem odnosnikow, bo kopie roznily sie
+  wylacznie numerem. Powtorzone zdanie nie dodaje wiedzy, a osiem kopii zawyza udzial przyjetych.
+
+Po poprawce ten sam przebieg: **1 z 9 (11%)**. Osiem kopii odrzuconych z podanym powodem, zostalo
+jedno uczciwe "brak danych".
+
+Wnioski z czterech pytan po poprawce:
+
+| pytanie | przyjete | co to znaczy |
+|---|---|---|
+| walki na Ukrainie | 5 z 5 | korpus ma pokrycie, model trzyma sie faktow |
+| gdzie protestuja ludzie | 4 z 4 | j.w. |
+| co sie dzieje w Iranie | 1 z 9 | fakty sa, ale zbyt ogolne - model nie ma co z nich powiedziec |
+| statki i kable podmorskie | 0 z 1 | nic nie przekroczylo progu; **to jest odpowiedz, nie awaria** |
+
+Trzecia bramka w trzy dni. Za kazdym razem powod byl ten sam: bramka sprawdzala forme, a model
+znalazl sposob, zeby forme spelnic bez tresci. Nie zakladam, ze teraz juz jej nie ma.
+
+## Caly stos ruszyl po raz pierwszy (2026-09-28)
+
+WSL2 i Docker Desktop zainstalowane przez UAC. **Restart okazal sie niepotrzebny** - WSL 2.7.14
+z Ubuntu odpowiedzial od razu, demon Dockera wstal w 20 sekund.
+
+Co to odblokowalo:
+
+| | przed | po |
+|---|---|---|
+| testy C# | 22, **13 pominietych** | **40 z 40, zero pominietych** |
+| testy integracyjne Pythona | niewykonalne | **4 z 4** |
+| baza, ingestia, API, detektory, front | nigdy nie uruchomione | **wszystkie dzialaja** |
+
+**1327 linii C#, ktore nigdy nie dotknely bazy, przeszly wszystkie testy za pierwszym razem.**
+Migracje (wszystkie piec skryptow, w tym `0005_embeddings`), hypertable TimescaleDB, zapis pozycji
+z prowenancja, endpointy, hub SignalR.
+
+### Blad, ktory mogl wyjsc wylacznie z uruchomienia
+
+Ingestia dostawala **403 Forbidden** z adsb.lol przy kazdym odczycie. Powod: `AddHttpClient()` bez
+zadnego naglowka. Wszystkie skrypty w Pythonie przedstawialy sie przez `User-Agent` od pierwszego
+dnia, warstwa C# nie - i **zaden test jednostkowy nie mogl tego zlapac, bo nie wychodza do sieci**.
+Doszedl `WachtaHttp.UserAgent`, ten sam ciag co w Pythonie, zeby jedno spojrzenie w log serwera
+pokazywalo wszystko, co ten projekt pobral, niezaleznie od warstwy.
+
+### Co pokazal pierwszy przebieg
+
+Po 15 minutach: **4618 pozycji, 426 samolotow, 170 wojskowych, 70 odczytow zrodel bez ani jednego
+bledu**. API oddaje 118 zywych samolotow wojskowych (`/api/aircraft/live`), 123 tory w przelocie,
+tor pojedynczego samolotu. Detektory licza co minute: D1 sprawdza ~320 samolotow, D3 przeliczyl
+zamkniete godziny.
+
+Powstaly 4 komorki zaklocen - **wszystkie z zerem zakloconych**. To nie jest wykrycie, tylko zapis
+kratek z wystarczajacym ruchem, i tak ma byc. Bałtyckiego ogniska z wczesniejszego pomiaru nie widac,
+bo tamten opieral sie na godzinie dedykowanego zbierania nad Baltykiem (13 781 pozycji), a tu mamy
+kwadrans i zrodlo wojskowe o zasiegu globalnym.
+
+### Czego nadal nie wiadomo
+
+- D1 nie wyprodukowal zadnego alertu - potrzebuje modelu pokrycia, ktory wymaga zamknietych godzin.
+- `coverage_hourly` jest puste z tego samego powodu.
+- To sa oczekiwane zachowania przy kwadransie danych, nie dowody poprawnosci. Dowodem bedzie doba.
+
+## Zywy potok odtworzyl ognisko zaklocen (2026-09-28)
+
+Po 1,5 godziny samodzielnej pracy stosu: **24 484 pozycje, 994 samoloty, 378 odczytow, 105 komorek
+zaklocen - w tym 46 z realnie zakloconymi samolotami**. Pierwsze 15 minut nie pokazalo nic poza
+kratkami z ruchem; to bylo za malo danych, nie brak zjawiska.
+
+Gdzie detektor wskazal zaklocenia, liczac sam, bez zadnego skryptu badawczego:
+
+| pozycja | udzial zakloconych | co to za miejsce |
+|---|---|---|
+| 54,05 / 23,06 | **100%** | przesmyk suwalski, granica obwodu kaliningradzkiego |
+| 54,41 / 22,96 | 100% | j.w. |
+| 53,10 / 22,74 | 82% | polnocno-wschodnia Polska |
+| 54,28 / 23,60 | 69% | pogranicze litewskie |
+| 58,62 / 20,91 | 46% | srodkowy Baltyk na wschod od Gotlandii |
+| 59,94 / 24,76 | 40% | wejscie do Zatoki Finskiej, pod Tallinem |
+
+### Sprawdzenie niezaleznym zrodlem
+
+Zestawienie 96 wspolnych komorek z gpsjam za **dzien poprzedni**:
+
+- zgodnych werdyktow **80 z 96 (83%)**
+- trafien 12, falszywych alarmow 12, przeoczen 4
+- precyzja **0,50**, czulosc **0,75**
+
+Korytarz kaliningradzki zgadza sie mocno (moje 100% wobec 46,7% w referencji, 82% wobec 28,6% -
+te same miejsca, mocniejszy udzial, bo licze z 1,5 h, a nie z doby).
+
+**Rozjazd, ktorego nie tlumacze:** srodkowy Baltyk. Ja mam 41-46%, gpsjam 0-3%. To moga byc
+zaklocenia, ktorych wczoraj nie bylo - zjawisko zmienia sie z dnia na dzien - albo moj blad.
+**Nie da sie tego rozstrzygnac**, dopoki gpsjam nie opublikuje dnia dzisiejszego. Referencja jest
+z innego dnia i z calej doby, moj pomiar z poltorej godziny; to porownanie jest orientacyjne, nie
+rozstrzygajace, i nie zastepuje bramki ewaluacji.
+
+### Smieciowe znaki wywolawcze
+
+W bazie wyladowaly `@@@@@@@@` i `ZLY41 @@`. W kodowaniu Mode-S `@` to znak **wypelniajacy** - pole
+znaku wywolawczego ma osiem znakow, a samolot, ktory go nie podaje, wypelnia je `@`. Parser obcinal
+tylko spacje, wiec brak identyfikatora trafial na mape jako identyfikator. Poprawione w
+`AdsbV2Parser.CleanCallsign`, 5 przypadkow testowych. Znalezione przez zajrzenie do bazy po
+uruchomieniu, nie przez test.
+
 ## Uwagi
 
 - **Nic nie jest zacommitowane.** Zgodnie z Twoją zasadą nie robię commitów bez zgody. 119 plików

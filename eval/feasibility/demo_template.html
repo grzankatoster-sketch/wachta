@@ -24,6 +24,57 @@
   .muted { color: #8b949e; font-size: 11px; }
   #legend i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: middle; }
   #legend s { display: inline-block; width: 16px; height: 3px; margin-right: 6px; vertical-align: middle; }
+  /* Notatka analityka: prawy dolny rog - jedyny wolny narożnik obok #stats i #legend. */
+  #analityk { right: 12px; bottom: 34px; width: 620px; font-size: 12px; }
+  #analityk h2 { font-size: 13px; margin: 0 0 4px; }
+  #analityk .meta { color: #8b949e; font-size: 11px; line-height: 1.5; display: block; }
+  #rag-tabs { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 7px; }
+  .rag-tab { display: flex; gap: 8px; align-items: baseline; justify-content: space-between;
+             background: #161b22; color: #8b949e; border: 1px solid #21262d; border-radius: 5px;
+             padding: 3px 7px; font-family: inherit; font-size: 11px; line-height: 1.35;
+             white-space: nowrap; text-align: left; cursor: pointer; }
+  .rag-tab > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+  /* Sam hover nie moze wygladac jak wybrana zakladka - niebieska ramka zostaje dla wyboru. */
+  .rag-tab:hover { background: #1c2333; color: #e6edf3; }
+  .rag-tab:focus-visible { outline: 2px solid #388bfd; outline-offset: 1px; }
+  .rag-tab[aria-selected="true"] { background: #1f6feb26; border-color: #388bfd; color: #e6edf3; }
+  .rag-tab .b { flex: none; font-variant-numeric: tabular-nums; color: #8b949e; }
+  .rag-tab[aria-selected="true"] .b { color: #7dd3fc; }
+  .rag-tab .b.zero { color: #eab308; }
+  /* overflow-y: scroll, nie auto - staly pasek mowi, ze tresc leci dalej pod krawedzia panelu. */
+  #rag-body { max-height: 200px; overflow-y: scroll; padding-right: 7px;
+              scrollbar-width: thin; scrollbar-color: #30363d #161b22; }
+  /* Na nizszych ekranach #stats siega nizej - notatka oddaje mu miejsce, tresc zostaje przewijalna. */
+  @media (max-height: 980px) { #rag-body { max-height: 140px; } }
+  @media (max-height: 900px) { #rag-body { max-height: 90px; } }
+  @media (max-height: 820px) { #rag-body { max-height: 64px; } #rag-stopka { font-size: 9px; } }
+  #rag-body::-webkit-scrollbar { width: 6px; }
+  #rag-body::-webkit-scrollbar-track { background: #161b22; border-radius: 3px; }
+  #rag-body::-webkit-scrollbar-thumb { background: #484f58; border-radius: 3px; }
+  /* Sciemnienie przy dolnej krawedzi: znak, ze pod spodem jest dalszy ciag. Znika na koncu listy. */
+  #rag-wrap { position: relative; }
+  #rag-wrap::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
+                     pointer-events: none; transition: opacity .15s;
+                     background: linear-gradient(to bottom, #0d111700, #0d1117f2); }
+  #rag-wrap[data-koniec="1"]::after { opacity: 0; }
+  .rag-q { color: #e6edf3; font-weight: 600; line-height: 1.4; margin-bottom: 6px; }
+  .rag-h { color: #8b949e; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+           margin: 9px 0 4px; }
+  .rag-sent { margin: 0 0 5px; padding-left: 8px; border-left: 2px solid #22c55e; line-height: 1.5; }
+  .rag-empty { padding: 7px 9px; border-left: 2px solid #eab308; background: #eab30814;
+               line-height: 1.5; color: #e6edf3; }
+  .rag-empty b { color: #eab308; }
+  .rag-cite { color: #7dd3fc; text-decoration: none; }
+  .rag-cite:hover { text-decoration: underline; }
+  #rag-fakty { columns: 2; column-gap: 16px; }
+  .rag-fact { line-height: 1.45; margin-bottom: 3px; color: #c9d1d9;
+              break-inside: avoid; overflow-wrap: anywhere; }
+  .rag-fact .n { color: #7dd3fc; }
+  .rag-rej { padding-left: 8px; border-left: 2px solid #f97316; margin-bottom: 5px; line-height: 1.45; }
+  .rag-rej .n { color: #f97316; font-variant-numeric: tabular-nums; }
+  .rag-rej .s { color: #6e7681; }
+  #rag-stopka { margin-top: 8px; padding-top: 7px; border-top: 1px solid #21262d;
+                color: #8b949e; font-size: 10px; line-height: 1.5; }
   footer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 6px 12px;
            background: #0d1117cc; font-size: 11px; color: #8b949e; }
   .maplibregl-popup-content { background: #161b22; color: #e6edf3; font-size: 12px; border-radius: 6px; }
@@ -101,6 +152,20 @@
        <i style="background:#78716c"></i> status nieznany</div>
 </div>
 
+<div class="box" id="analityk">
+  <h2>Notatka analityka — warstwa AI</h2>
+  <span class="meta">__RAG_MODEL__ lokalnie · embeddingi __RAG_EMBEDDER__ · korpus __RAG_DOCS__ dokumentów<br>
+    pytań: __N_RAG_Q__ · zdań przyjętych: __N_RAG_ACCEPTED__ ·
+    <b style="color:#f97316">odrzuconych przez bramki: __N_RAG_REJECTED__</b></span>
+  <div id="rag-tabs" role="tablist"></div>
+  <div id="rag-wrap"><div id="rag-body"></div></div>
+  <div id="rag-stopka">
+    Bramka <b>cytowań</b> odsiewa zdania bez odnośnika, bramka <b>liczb</b> — zdania z liczbami,
+    których nie ma w cytowanym fakcie.<br>
+    To <b>zapisana migawka</b> jednego przebiegu, a nie odpowiedź generowana na żywo.
+  </div>
+</div>
+
 <footer>Dane: adsb.lol (ODbL) · OpenStreetMap contributors (ODbL) · Digitraffic · OpenSanctions · GDELT · Kiel Institute · DeepStateMap (linia frontu, użycie niekomercyjne) · podkład OpenFreeMap. Projekt niekomercyjny.</footer>
 
 <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
@@ -119,6 +184,130 @@ const loiters = __LOITERS__;
 const silences = __GAPS__;
 const transfers = __STS__;
 const doubles = __IDENTITY__;
+const analityk = __ANALYST__;
+
+/* ---- Notatka analityka (RAG): zapisany przebieg, nie zapytanie na zywo ---- */
+
+// Powody odrzucenia zapisane sa w danych bez polskich znakow - tu dostaja czytelne etykiety.
+const RAG_POWODY = {
+  "brak odnosnika do faktu": "brak odnośnika do faktu",
+  "powtorzenie zdania juz przyjetego": "powtórzenie zdania już przyjętego",
+  "odnosnik bez tresci": "odnośnik bez treści",
+  "liczba nie wystepuje w cytowanym fakcie": "liczba nie występuje w cytowanym fakcie",
+  "nic w korpusie nie przekroczylo progu": "nic w korpusie nie przekroczyło progu podobieństwa",
+};
+
+// Pytania zadano modelowi bez polskich znakow - na stronie pokazujemy je poprawnie zapisane.
+// To tylko zapis, nie zmiana tresci; nieznane pytanie leci na strone dokladnie tak, jak w danych.
+const RAG_PYTANIA = {
+  "jakie sa doniesienia o walkach na Ukrainie?": "Jakie są doniesienia o walkach na Ukrainie?",
+  "co sie dzieje w Iranie?": "Co się dzieje w Iranie?",
+  "gdzie protestuja ludzie?": "Gdzie protestują ludzie?",
+  "czy sa doniesienia o statkach i kablach podmorskich?": "Czy są doniesienia o statkach i kablach podmorskich?",
+};
+
+function ragPytanie(q) { return RAG_PYTANIA[q] || q; }
+
+function ragEsc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+function ragHost(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return String(url); }
+}
+
+// Odnosnik [n] zostaje w zdaniu i prowadzi do zrodla tego faktu.
+function ragCytaty(sentence, facts) {
+  return ragEsc(sentence).replace(/\[(\d+)\]/g, (m, n) => {
+    const f = facts.find((x) => String(x.n) === n);
+    return f
+      ? `<a class="rag-cite" href="${ragEsc(f.source)}" target="_blank" rel="noopener" title="${ragEsc(f.text)}">[${n}]</a>`
+      : `<span class="rag-cite">[${n}]</span>`;
+  });
+}
+
+function ragOdrzucone(rejected) {
+  const grupy = new Map();
+  for (const r of rejected) {
+    const klucz = RAG_POWODY[r.reason] || r.reason;
+    if (!grupy.has(klucz)) grupy.set(klucz, []);
+    if (r.sentence) grupy.get(klucz).push(r.sentence);
+  }
+  return [...grupy.entries()].map(([powod, zdania]) => {
+    const n = rejected.filter((r) => (RAG_POWODY[r.reason] || r.reason) === powod).length;
+    const przyklad = zdania.length
+      ? ` <span class="s">— np. „${ragEsc(zdania[0].length > 70 ? zdania[0].slice(0, 67) + "…" : zdania[0])}”</span>`
+      : "";
+    return `<div class="rag-rej"><span class="n">${n} ×</span> ${ragEsc(powod)}${przyklad}</div>`;
+  }).join("");
+}
+
+function ragRysuj(i) {
+  const a = analityk.answers[i];
+  const przyjete = a.accepted.length;
+  const odrzucone = a.rejected.length;
+
+  let html = `<div class="rag-q">${ragEsc(ragPytanie(a.question))}</div>`;
+
+  if (!przyjete) {
+    html += `<div class="rag-empty"><b>Brak danych.</b> Żaden dokument z korpusu nie przekroczył progu
+      podobieństwa, więc analityk nie dostał ani jednego faktu i nie napisał ani jednego zdania.
+      To jest wynik warstwy, nie jej awaria: wolimy milczenie niż zmyśloną odpowiedź.</div>`;
+  } else {
+    html += `<div class="rag-h">Przyjęte zdania (${przyjete})</div>`;
+    html += a.accepted.map((s) => `<div class="rag-sent">${ragCytaty(s, a.facts)}</div>`).join("");
+  }
+
+  html += `<div class="rag-h">Odrzucone przez bramki: ${odrzucone}</div>`;
+  html += odrzucone
+    ? ragOdrzucone(a.rejected)
+    : `<div class="rag-rej" style="border-color:#30363d;color:#8b949e">żadne zdanie nie wypadło — wszystkie miały pokrycie w faktach</div>`;
+
+  html += `<div class="rag-h">Fakty podane modelowi (${a.facts.length})</div>`;
+  html += a.facts.length
+    ? `<div id="rag-fakty">` + a.facts.map((f) => `<div class="rag-fact"><span class="n">[${f.n}]</span> ${ragEsc(f.text)} · ` +
+        `<a class="rag-cite" href="${ragEsc(f.source)}" target="_blank" rel="noopener">${ragEsc(ragHost(f.source))}</a></div>`).join("") + `</div>`
+    : `<div class="rag-fact" style="color:#8b949e">brak — wyszukiwanie semantyczne nie zwróciło niczego powyżej progu</div>`;
+
+  const body = document.getElementById("rag-body");
+  body.innerHTML = html;
+  body.scrollTop = 0;
+  ragKoniec();
+  for (const b of document.querySelectorAll(".rag-tab")) {
+    b.setAttribute("aria-selected", String(Number(b.dataset.i) === i));
+  }
+}
+
+// Czy widac juz koniec tresci - od tego zalezy, czy pokazac sciemnienie przy krawedzi.
+function ragKoniec() {
+  const body = document.getElementById("rag-body");
+  const koniec = body.scrollTop + body.clientHeight >= body.scrollHeight - 2;
+  document.getElementById("rag-wrap").dataset.koniec = koniec ? "1" : "0";
+}
+
+(function ragPanel() {
+  window.__ragCount = analityk.answers.length;
+  // Brak przebiegu to blad budowania, ale nie powod, zeby wyjatek zabil reszte mapy.
+  if (!analityk.answers.length) {
+    document.getElementById("rag-body").innerHTML =
+      '<div class="rag-empty">Brak zapisanego przebiegu analityka.</div>';
+    return;
+  }
+  const tabs = document.getElementById("rag-tabs");
+  document.getElementById("rag-body").addEventListener("scroll", ragKoniec);
+  tabs.innerHTML = analityk.answers.map((a, i) => {
+    const pusto = a.accepted.length === 0;
+    const odznaka = pusto ? "brak danych" : `${a.accepted.length} / ${a.accepted.length + a.rejected.length}`;
+    const pelne = ragPytanie(a.question);
+    const pytanie = pelne.length > 78 ? pelne.slice(0, 76) + "…" : pelne;
+    return `<button class="rag-tab" role="tab" data-i="${i}" aria-selected="${i === 0}" title="${ragEsc(pelne)}">` +
+           `<span>${ragEsc(pytanie)}</span><span class="b${pusto ? " zero" : ""}">${odznaka}</span></button>`;
+  }).join("");
+  for (const b of tabs.querySelectorAll(".rag-tab")) {
+    b.addEventListener("click", () => ragRysuj(Number(b.dataset.i)));
+  }
+  ragRysuj(0);
+})();
 
 const map = new maplibregl.Map({
   container: "map",

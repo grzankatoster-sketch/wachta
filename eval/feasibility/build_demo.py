@@ -41,6 +41,7 @@ GAPS = ROOT / "eval" / "fixtures" / "gaps_snapshot.json"
 STS = ROOT / "eval" / "fixtures" / "sts_snapshot.json"
 IDENTITY = ROOT / "eval" / "fixtures" / "identity_snapshot.json"
 TRACKS = ROOT / "eval" / "fixtures" / "ship_tracks.json"
+ANALYST = ROOT / "eval" / "fixtures" / "analyst_answers.json"
 HEADERS = {"User-Agent": "wachta-demo/0.1 (non-commercial portfolio project)"}
 
 SOURCES = [
@@ -246,6 +247,18 @@ def identities() -> tuple[list[dict], str]:
     return data["cases"], data.get("day", "")
 
 
+def analyst_note() -> dict:
+    """Zapisany przebieg analityka RAG: pytania, zdania przyjete i te, ktore odsialy bramki.
+
+    Odrzucone nie sa bledem do ukrycia - to jedyny widoczny dowod, ze bramki cytowan i liczb
+    w ogole dzialaja, wiec ida na strone razem z przyjetymi.
+    """
+    if not ANALYST.exists():
+        print("  brak analyst_answers.json - pomijam notatke analityka")
+        return {"model": "?", "embedder": "?", "documents": 0, "answers": []}
+    return json.loads(ANALYST.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     print("pobieram samoloty (3 odczyty, 10 s odstepu)")
     aircraft = fetch_aircraft()
@@ -262,6 +275,10 @@ def main() -> int:
     silences, gap_day = gaps()
     meetings, sts_day = transfers()
     doubles, id_day = identities()
+    rag = analyst_note()
+    rag_accepted = sum(len(a["accepted"]) for a in rag["answers"])
+    rag_rejected = sum(len(a["rejected"]) for a in rag["answers"])
+    rag_empty = sum(1 for a in rag["answers"] if not a["accepted"])
     military = sum(1 for a in aircraft if a["military"])
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     print(f"samolotow {len(aircraft)} (wojskowych {military}), heksow zaklocen {len(jamming)}, "
@@ -269,6 +286,8 @@ def main() -> int:
           f"tras statkow {len(tracks)}, zdarzen ladowych {len(events)} z {event_hours:.0f} h, darczyncow {len(donors)}, "
           f"dwie wersje {len(versions)}, obszarow frontu {len(front['features'])}, anomalii {len(spikes)}, "
           f"torow dyzurnych {len(stations)}, cichych statkow {len(silences)}, przeladunkow {len(meetings)}, tozsamosci {len(doubles)}")
+    print(f"notatka analityka: pytan {len(rag['answers'])} (w tym 'brak danych' {rag_empty}), "
+          f"zdan przyjetych {rag_accepted}, odrzuconych przez bramki {rag_rejected}")
 
     page = (ROOT / "eval" / "feasibility" / "demo_template.html").read_text(encoding="utf-8")
     page = (page
@@ -316,7 +335,14 @@ def main() -> int:
             .replace("__TRACKS__", json.dumps(tracks))
             .replace("__N_TRACKS__", str(len(tracks)))
             .replace("__TRACK_FROM__", (track_window.get("from") or "")[11:16])
-            .replace("__TRACK_TO__", (track_window.get("to") or "")[11:16]))
+            .replace("__TRACK_TO__", (track_window.get("to") or "")[11:16])
+            .replace("__ANALYST__", json.dumps(rag))
+            .replace("__RAG_MODEL__", str(rag.get("model", "?")))
+            .replace("__RAG_EMBEDDER__", str(rag.get("embedder", "?")))
+            .replace("__RAG_DOCS__", str(rag.get("documents", 0)))
+            .replace("__N_RAG_Q__", str(len(rag["answers"])))
+            .replace("__N_RAG_ACCEPTED__", str(rag_accepted))
+            .replace("__N_RAG_REJECTED__", str(rag_rejected)))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(page, encoding="utf-8")
     print(f"strona: {OUT} ({OUT.stat().st_size // 1024} KB)")
@@ -337,6 +363,11 @@ def main() -> int:
         "console.log('WARSTWY ' + JSON.stringify(counts));\n"
         "const dead = Object.entries(counts).filter(([, n]) => n <= 0);\n"
         "if (dead.length) { console.error('PUSTE WARSTWY ' + JSON.stringify(dead)); process.exit(2); }\n"
+        # Panel analityka nie jest warstwa mapy, wiec ma wlasna kontrole: brak pytan = blad budowania.
+        "const rag = await page.evaluate(() => ({ pytania: window.__ragCount || 0, "
+        "zdania: document.querySelectorAll('#rag-body .rag-sent, #rag-body .rag-empty').length }));\n"
+        "console.log('ANALITYK ' + JSON.stringify(rag));\n"
+        "if (!rag.pytania || !rag.zdania) { console.error('PUSTY PANEL ANALITYKA'); process.exit(3); }\n"
         f'await page.screenshot({{ path: "{SHOT.as_posix()}" }});\n'
         "await browser.close();\n", encoding="utf-8")
     try:
