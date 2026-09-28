@@ -1,0 +1,190 @@
+{
+ "model": "qwen3.5:9b",
+ "embedder": "bge-m3",
+ "documents": 500,
+ "note": "Bramka cytowan odsiewa zdania bez odnosnika, bramka liczb odsiewa zdania, ktorych liczby nie wystepuja w cytowanym fakcie. Ta druga powstala, bo pierwsza sama przepuszczala przekrecenia prawdziwych faktow.",
+ "answers": [
+  {
+   "question": "jakie sa doniesienia o walkach na Ukrainie?",
+   "facts": [
+    {
+     "n": 1,
+     "text": "UKRAINIAN | MILITARY | grozba | Ukraine",
+     "source": "https://slguardian.org/xis-faster-us-flight-highlights-a-wider-shift-in-us-china-leverage/"
+    },
+    {
+     "n": 2,
+     "text": "SAINT | UKRAINE | walka | Ukraine",
+     "source": "https://timesofindia.indiatimes.com/india/evening-newswrap-ec-holds-key-meeting-amid-sir-row-11-killed-in-pak-suicide-blast-more/articleshow/134504524.cms"
+    },
+    {
+     "n": 3,
+     "text": "UKRAINE | RUSSIA | walka | Sumy, Sums'ka Oblast', Ukraine",
+     "source": "https://www.standardmedia.co.ke/europe/article/2001558747/at-least-seven-killed-in-russian-and-ukrainian-strikes"
+    },
+    {
+     "n": 4,
+     "text": "APPEALS COURT | DEPARTMENT OF DEFENSE | zerwanie relacji | Ukraine",
+     "source": "https://www.hottalkradio.com/news/2026/09/27/"
+    },
+    {
+     "n": 5,
+     "text": "UKRAINE | walka | Crimea, Krym, Avtonomna Respublika, Ukraine",
+     "source": "http://www.washingtonexaminer.com/news/world/4743857/how-russia-turned-tide-summer-air-war-ukraine/"
+    },
+    {
+     "n": 6,
+     "text": "THE UN | UKRAINIAN | konsultacje | Ukraine",
+     "source": "https://www.dailymail.com/news/article-16162461/Andy-Burnham-growing-unrest-Labour-party-conference.html"
+    },
+    {
+     "n": 7,
+     "text": "UKRAINE | RUSSIAN | sledztwo | Crimea, Krym, Avtonomna Respublika, Ukraine",
+     "source": "http://www.washingtonexaminer.com/news/world/4743857/how-russia-turned-tide-summer-air-war-ukraine/"
+    },
+    {
+     "n": 8,
+     "text": "UKRAINIAN | THE UN | konsultacje | Ukraine",
+     "source": "https://www.dailymail.com/news/article-16162461/Andy-Burnham-growing-unrest-Labour-party-conference.html"
+    }
+   ],
+   "accepted": [
+    "Na Ukrainie toczy się walka w Sumach, gdzie zginęło co najmniej siedmiu ludzi podczas uderzeń rosyjskich i ukraińskich [3].",
+    "Walki prowadzone są również na Krymie [5].",
+    "W innych miejscach notowana jest groźba militarna [1] oraz trwają działania bojowe [2].",
+    "Nie ma informacji o konsultacjach ONZ ani śledztwach jako doniesieniach o walkach [6][8].",
+    "Brak danych dotyczących zerwania relacji z Departamentem Obrony w kontekście bezpośrednich walk [4]."
+   ],
+   "rejected": [],
+   "kept_share": 1.0
+  },
+  {
+   "question": "co sie dzieje w Iranie?",
+   "facts": [
+    {
+     "n": 1,
+     "text": "IRAN | apel | Iran",
+     "source": "https://www.aljazeera.com/opinions/2026/9/26/the-intelligence-war-is-turning-against-the-houthis"
+    },
+    {
+     "n": 2,
+     "text": "IRAN | IOWA | zadanie | Iran",
+     "source": "https://talkingpointsmemo.com/the-weekender/the-midterms-look-bad-for-republicans-how-are-gop-candidates-coping"
+    },
+    {
+     "n": 3,
+     "text": "IRAN | apel | Tehran, Tehran, Iran",
+     "source": "https://english.news.cn/20260926/2daef25d05164f1e88ab16c137b8548c/c.html"
+    },
+    {
+     "n": 4,
+     "text": "IRAQI | IRANIAN | zerwanie relacji | Iran",
+     "source": "https://www.islamicinvitationturkey.com/iraqi-resistance-group-vows-to-hold-airport-sit-ins-over-iran-aerial-blockade/"
+    },
+    {
+     "n": 5,
+     "text": "IRANIAN | CIVIL SERVANT | demonstracja sily | Iran",
+     "source": "https://www.khabaragency.net/news253427.html"
+    },
+    {
+     "n": 6,
+     "text": "ISRAEL | TEHRAN | protest | Tehran, Tehran, Iran",
+     "source": "https://www.hindustantimes.com/world-news/china-un-general-assembly-us-pushback-respect-sovereignty-of-gulf-countries-cuba-blockade-han-zheng-trump-xi-unga-101790433462428.html"
+    },
+    {
+     "n": 7,
+     "text": "IRAN | OMAN | przymus | Tehran, Tehran, Iran",
+     "source": "https://kaieteurnewsonline.com/2026/09/26/allies-unite-behind-saudi-arabia-as-more-iranian-flights-restricted/"
+    },
+    {
+     "n": 8,
+     "text": "MEDIA | IRAN | pomoc | Iran",
+     "source": "http://northcountrynow.com/premium/stories/iowas-us-senate-candidates-share-fuel-cost-policies-trade-criticisms-on-campaign-trail,392656"
+    }
+   ],
+   "accepted": [
+    "[1] Brak danych na temat wydarzeń w Iranie."
+   ],
+   "rejected": [
+    {
+     "reason": "brak odnosnika do faktu",
+     "sentence": "Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "powtorzenie zdania juz przyjetego",
+     "sentence": "[2] Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "powtorzenie zdania juz przyjetego",
+     "sentence": "[3] Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "powtorzenie zdania juz przyjetego",
+     "sentence": "[4] Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "powtorzenie zdania juz przyjetego",
+     "sentence": "[5] Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "powtorzenie zdania juz przyjetego",
+     "sentence": "[6] Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "powtorzenie zdania juz przyjetego",
+     "sentence": "[7] Brak danych na temat wydarzeń w Iranie."
+    },
+    {
+     "reason": "odnosnik bez tresci",
+     "sentence": "[8]"
+    }
+   ],
+   "kept_share": 0.11
+  },
+  {
+   "question": "gdzie protestuja ludzie?",
+   "facts": [
+    {
+     "n": 1,
+     "text": "ISRAEL | TEHRAN | protest | Tehran, Tehran, Iran",
+     "source": "https://www.hindustantimes.com/world-news/china-un-general-assembly-us-pushback-respect-sovereignty-of-gulf-countries-cuba-blockade-han-zheng-trump-xi-unga-101790433462428.html"
+    },
+    {
+     "n": 2,
+     "text": "LAWMAKER | ISRAELI | protest | Gaza, Israel (general), Israel",
+     "source": "https://www.presstv.co.uk/Detail/2026/09/26/777050/explainer-how-us-congress-targeting-pro-palestine-activism-through-funding-restrictions"
+    },
+    {
+     "n": 3,
+     "text": "LEBANESE | ACTIVIST | demonstracja sily | Beirut, Beyrouth, Lebanon",
+     "source": "https://english.aawsat.com/arab-world/5322889-leadership-crisis-hezbollah-after-nasrallahs-assassination"
+    },
+    {
+     "n": 4,
+     "text": "ACTIVIST | LEBANESE | demonstracja sily | Beirut, Beyrouth, Lebanon",
+     "source": "https://english.aawsat.com/arab-world/5322889-leadership-crisis-hezbollah-after-nasrallahs-assassination"
+    }
+   ],
+   "accepted": [
+    "Ludzie protestują w Teheranie [1].",
+    "Demonstracje odbywają się również w Izraelu, w Gazie i na terenie Izraela ogólnie [2].",
+    "Protesty mają miejsce także w Bejrucie, w Libanie [3].",
+    "Kolejna demonstracja siły również miała miejsce w Bejrucie [4]."
+   ],
+   "rejected": [],
+   "kept_share": 1.0
+  },
+  {
+   "question": "czy sa doniesienia o statkach i kablach podmorskich?",
+   "facts": [],
+   "accepted": [],
+   "rejected": [
+    {
+     "reason": "nic w korpusie nie przekroczylo progu",
+     "sentence": ""
+    }
+   ],
+   "kept_share": 0.0
+  }
+ ]
+}

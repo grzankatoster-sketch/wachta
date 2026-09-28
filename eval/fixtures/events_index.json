@@ -1,0 +1,154 @@
+{
+ "model": "bge-m3",
+ "dimensions": 1024,
+ "documents": 2204,
+ "seconds": 364.1,
+ "note": "Teksty zdarzen sa po angielsku, pytania po polsku. Wynik to podobienstwo, nie trafnosc - najblizszy sasiad istnieje zawsze, takze gdy nic nie pasuje.",
+ "questions": [
+  {
+   "question": "rosyjski statek przy kablu podmorskim",
+   "hits": [
+    {
+     "score": 0.5554,
+     "text": "MILITARY | RUSSIA | walka | Ukraine | RUS",
+     "place": "Ukraine",
+     "url": "https://www.eng.kavkaz-uzel.eu/articles/78896"
+    },
+    {
+     "score": 0.5529,
+     "text": "RUSSIA | wspolpraca dyplomatyczna | Black Sea, Oceans (general), Oceans | RUS",
+     "place": "Black Sea, Oceans (general), Oceans",
+     "url": "https://whbl.com/2026/09/26/at-un-russia-and-germanys-top-diplomats-hold-first-talks-since-2022/"
+    },
+    {
+     "score": 0.5455,
+     "text": "RUSSIAN | MILITARY | przymus | Moscow, Moskva, Russia | RUS",
+     "place": "Moscow, Moskva, Russia",
+     "url": "https://www.dailysabah.com/world/europe/russia-ukraine-trade-deadly-strikes-as-7-people-are-killed"
+    },
+    {
+     "score": 0.5442,
+     "text": "RUSSIA | MOSCOW | apel | Ukraine | RUS | RUS",
+     "place": "Ukraine",
+     "url": "https://www.livemint.com/news/world/russia-may-intensify-hybrid-warfare-against-nato-in-coming-months-denmark-warns-putin-rejects-claims-11790433168029.html"
+    }
+   ]
+  },
+  {
+   "question": "protesty i zamieszki w miastach",
+   "hits": [
+    {
+     "score": 0.5872,
+     "text": "GOVERNMENT | MILITARY | demonstracja sily | Moscow, Moskva, Russia",
+     "place": "Moscow, Moskva, Russia",
+     "url": "https://english.aawsat.com/world/5322863-europe-and-dilemma-preparing-2030-war"
+    },
+    {
+     "score": 0.5872,
+     "text": "UNITED STATES | TEHRAN | protest | Tehran, Tehran, Iran | USA | IRN",
+     "place": "Tehran, Tehran, Iran",
+     "url": "https://www.hindustantimes.com/world-news/china-un-general-assembly-us-pushback-respect-sovereignty-of-gulf-countries-cuba-blockade-han-zheng-trump-xi-unga-101790433462428.html"
+    },
+    {
+     "score": 0.5793,
+     "text": "SECURITY FORCE | protest | Germany",
+     "place": "Germany",
+     "url": "https://slguardian.org/iranian-photojournalist-sentenced-to-15-years-after-documenting-protests-and-war/"
+    },
+    {
+     "score": 0.5762,
+     "text": "ISRAEL | TEHRAN | protest | Tehran, Tehran, Iran | ISR | IRN",
+     "place": "Tehran, Tehran, Iran",
+     "url": "https://www.hindustantimes.com/world-news/china-un-general-assembly-us-pushback-respect-sovereignty-of-gulf-countries-cuba-blockade-han-zheng-trump-xi-unga-101790433462428.html"
+    }
+   ]
+  },
+  {
+   "question": "pomoc wojskowa dla Ukrainy",
+   "hits": [
+    {
+     "score": 0.622,
+     "text": "ARMED FORCES | REPRESENTATIVES | konsultacje | Ukraine",
+     "place": "Ukraine",
+     "url": "https://www.aol.co.uk/articles/putin-plotting-attacks-britain-uk-133800000.html"
+    },
+    {
+     "score": 0.6087,
+     "text": "REPRESENTATIVES | ARMED FORCES | konsultacje | Ukraine",
+     "place": "Ukraine",
+     "url": "https://www.aol.co.uk/articles/putin-plotting-attacks-britain-uk-133800000.html"
+    },
+    {
+     "score": 0.607,
+     "text": "MILITARY | RUSSIA | walka | Ukraine | RUS",
+     "place": "Ukraine",
+     "url": "https://www.eng.kavkaz-uzel.eu/articles/78896"
+    },
+    {
+     "score": 0.6039,
+     "text": "UKRAINE | MILITARY | konsultacje | Yalta, Donets'ka Oblast', Ukraine | UKR",
+     "place": "Yalta, Donets'ka Oblast', Ukraine",
+     "url": "https://lasvegassun.com/news/2026/sep/26/kyiv-has-the-tech-brilliance-to-force-russia-to-th/"
+    }
+   ]
+  },
+  {
+   "question": "porwanie i zatrzymanie ludzi",
+   "hits": [
+    {
+     "score": 0.5301,
+     "text": "POLAND | ustepstwo | Poland | POL",
+     "place": "Poland",
+     "url": "https://www.thelocal.de/20260926/breakthroughs-for-the-radical-and-far-right-in-europe"
+    },
+    {
+     "score": 0.5295,
+     "text": "POLICE | sledztwo | Serbia",
+     "place": "Serbia",
+     "url": "https://www.manchestereveningnews.co.uk/news/uk-news/police-launch-new-investigation-jill-34675691"
+    },
+    {
+     "score": 0.5223,
+     "text": "POLICE | sledztwo | Athens, AttikíR, Greece",
+     "place": "Athens, AttikíR, Greece",
+     "url": "https://www.lbc.co.uk/article/brit-pensioner-and-wife-among-six-dead-after-building-collapses-in-athens-5Hjdj6Y_2/"
+    },
+    {
+     "score": 0.5149,
+     "text": "POLISH | UKRAINE | walka | Ukraine | POL | UKR",
+     "place": "Ukraine",
+     "url": "https://www.dw.com/en/russia-expected-to-intensify-hybrid-war-on-europe/a-79444596"
+    }
+   ]
+  },
+  {
+   "question": "wybuch i ostrzal artyleryjski",
+   "hits": [
+    {
+     "score": 0.5349,
+     "text": "MILITARY | AZERBAIJAN | demonstracja sily | Azerbaijan | AZE",
+     "place": "Azerbaijan",
+     "url": "https://www.azernews.az/events/264531.html"
+    },
+    {
+     "score": 0.5305,
+     "text": "AZERBAIJAN | MILITARY | demonstracja sily | Azerbaijan | AZE",
+     "place": "Azerbaijan",
+     "url": "https://www.azernews.az/events/264531.html"
+    },
+    {
+     "score": 0.4716,
+     "text": "MILITARY | demonstracja sily | Kyiv, Kyyiv, Misto, Ukraine",
+     "place": "Kyiv, Kyyiv, Misto, Ukraine",
+     "url": "https://english.aawsat.com/world/5322863-europe-and-dilemma-preparing-2030-war"
+    },
+    {
+     "score": 0.4577,
+     "text": "GOVERNMENT | MILITARY | demonstracja sily | Moscow, Moskva, Russia",
+     "place": "Moscow, Moskva, Russia",
+     "url": "https://english.aawsat.com/world/5322863-europe-and-dilemma-preparing-2030-war"
+    }
+   ]
+  }
+ ]
+}
