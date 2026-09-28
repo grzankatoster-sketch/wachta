@@ -34,7 +34,15 @@ if (-not (Missing "docker" "testy integracyjne Pythona" "zainstaluj Docker Deskt
 
 Step "front: testy jednostkowe" { Set-Location "$root\web"; npm test }
 Step "front: kontrola typow i budowa" { Set-Location "$root\web"; npm run build }
-Step "front: testy w przegladarce" { Set-Location "$root\web"; npx playwright test }
+Step "front: testy w przegladarce (dev)" { Set-Location "$root\web"; npx playwright test --project=dev }
+
+# Bramka produkcyjna: budowa + `vite preview` + zliczanie kafli wektorowych. Lapie klase bledu,
+# ktorej suita dev nie widzi z zasady (hashowanie chunkow, fallback SPA na brakujacy plik).
+# Domyslnie buduje swiezy artefakt (~45 s). Jesli masz podniesiony stos compose i chcesz zamiast
+# tego sprawdzic prawdziwy kontener z nginx, ustaw przed uruchomieniem:
+#   $env:WACHTA_E2E_PROD_URL = "http://localhost:8083"
+# Wymaga wyjscia do sieci (kafle z tiles.openfreemap.org).
+Step "front: bramka produkcyjna (podklad mapy)" { Set-Location "$root\web"; npx playwright test --project=prod }
 
 # SDK bywa w profilu uzytkownika, bo instalator dotnet-install.ps1 nie wymaga admina i domyslnie
 # nie dopisuje sie do PATH. Systemowy dotnet.exe moze byc samym runtime, wiec nie wystarczy go

@@ -62,6 +62,23 @@ stages:
             workingDirectory: web
             displayName: kontrola typow i budowa
 
+          # Bramka produkcyjna. Sama buduje artefakt i podnosi `vite preview` (patrz
+          # web/playwright.config.ts), wiec nie potrzebuje dockera ani stosu compose - ale POTRZEBUJE
+          # wyjscia do sieci: liczy kafle wektorowe sciagane z tiles.openfreemap.org. Bez internetu
+          # na agencie ten krok zapali sie na czerwono i bedzie to falszywy alarm.
+          - script: npx playwright install --with-deps chromium
+            workingDirectory: web
+            displayName: przegladarka dla bramki
+          - script: npm run test:ui:prod
+            workingDirectory: web
+            displayName: bramka produkcyjna (podklad mapy w zbudowanym artefakcie)
+          # Zrzuty i slady tylko przy awarii - inaczej kazdy zielony przebieg ciagnalby kilkanascie MB.
+          - task: PublishPipelineArtifact@1
+            condition: failed()
+            inputs:
+              targetPath: web/test-results
+              artifact: bramka-produkcyjna
+
   - stage: Eval
     displayName: Bramka detektorow
     dependsOn: Test

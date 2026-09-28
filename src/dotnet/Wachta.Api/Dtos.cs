@@ -22,3 +22,12 @@ public sealed record JammingDto(string H3, int NAircraft, int NDegraded);
 /// order; Timestamps[i] is Unix seconds for the same index.</summary>
 public sealed record ReplayPath(
     string Hex, string? Flight, string? TypeCode, double[][] Path, long[] Timestamps);
+
+/// <summary>One document found by meaning, with the score that says how much to trust it.</summary>
+public sealed record SearchHit(
+    string Id, string Text, double Score, Dictionary<string, System.Text.Json.JsonElement> Metadata);
+
+/// <summary>A whole answer, including the caveat. The caveat travels with the data because whoever
+/// reads this - a person or a model - will be exactly as careful as the response makes them.</summary>
+public sealed record SearchResult(
+    string Query, string Model, double MinScore, int Found, IReadOnlyList<SearchHit> Hits, string Caveat);

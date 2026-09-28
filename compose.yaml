@@ -29,7 +29,12 @@ services:
 
   api:
     build: { context: ., dockerfile: infra/docker/dotnet.Dockerfile, args: { PROJECT: Wachta.Api } }
-    environment: *db-env
+    environment:
+      <<: *db-env
+      # Model osadzen chodzi na HOSCIE, nie w compose: "localhost" wewnatrz kontenera wskazuje na
+      # sam kontener, wiec wyszukiwanie po znaczeniu odpowiadaloby 503 i wygladalo jak pusty korpus.
+      Ollama__Url: ${WACHTA_OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts: ["host.docker.internal:host-gateway"]
     # Port na hoscie zmienisz przez WACHTA_API_PORT w .env, bez edycji tego pliku.
     # Wewnatrz sieci compose API zawsze nasluchuje na 8080 (tak kieruje nginx w web).
     ports: ["${WACHTA_API_PORT:-8080}:8080"]

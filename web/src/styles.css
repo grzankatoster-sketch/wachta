@@ -121,3 +121,86 @@ body {
   font-size: 11px;
   color: #8b949e;
 }
+
+/* Wyszukiwanie po znaczeniu. Panel dzieli miejsce z lista alarmow po lewej: alarmy sa tym, co
+   system znalazl sam, a szukanie tym, o co pyta czlowiek - dwie rozne rzeczy, ale ten sam obszar
+   ekranu, wiec ten sam styl ramki. */
+.szukaj {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 360px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: #0d1117e6;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.szukaj h2 { font-size: 15px; margin: 0 0 6px; }
+.szukaj-wstep { margin: 0 0 10px; color: #8b949e; font-size: 12px; line-height: 1.45; }
+.szukaj form { display: flex; gap: 6px; }
+
+.szukaj input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0b0f14;
+  color: inherit;
+  font: inherit;
+}
+.szukaj input:focus-visible, .szukaj button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+
+.szukaj button {
+  padding: 6px 10px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #161b22;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.szukaj button:hover:not(:disabled) { background: #21262d; }
+.szukaj button:disabled { opacity: 0.5; cursor: default; }
+
+.filtry, .podpowiedzi { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.filtry button, .podpowiedzi button { padding: 3px 8px; font-size: 12px; }
+.filtry .wybrany { border-color: #58a6ff; background: #14243a; }
+
+.szukaj-licznik { margin: 10px 0 6px; color: #8b949e; font-size: 12px; }
+.trafienia { list-style: none; margin: 0; padding: 0; }
+
+.trafienie { padding: 7px 0; border-top: 1px solid #21262d; }
+.trafienie-glowa { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.trafienie-tresc { line-height: 1.4; }
+
+/* Wynik podobienstwa jest przy KAZDYM trafieniu, bo najblizszy sasiad istnieje zawsze - takze
+   wtedy, gdy nic nie pasuje. Kolor mowi to samo co liczba, dla czytajacych szybko. */
+.wynik { padding: 1px 6px; border-radius: 10px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.wynik.mocne { background: #14351f; color: #7ee2a8; }
+.wynik.srednie { background: #3a3216; color: #e8c468; }
+.wynik.slabe { background: #2b2b2b; color: #9aa4ad; }
+
+.znacznik { padding: 1px 6px; border-radius: 10px; background: #1f2630; color: #9aa4ad; font-size: 11px; }
+.miejsce { color: #8b949e; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zrodlo { display: inline-block; margin-top: 3px; color: #58a6ff; font-size: 11px; }
+
+/* Brak wynikow i awaria modelu WYGLADAJA inaczej, bo znacza co innego: pierwsze to odpowiedz
+   ("w korpusie nic takiego nie ma"), drugie to brak odpowiedzi. Zlanie ich w jedno jest tym,
+   od czego narzedzie wyszukiwania zaczyna klamac. */
+.szukaj-nic { margin-top: 10px; padding: 8px 10px; border-left: 3px solid #d29922; background: #1c1710; }
+.szukaj-blad { margin-top: 10px; padding: 8px 10px; border-left: 3px solid #f85149; background: #1f1315; }
+.drobne { margin-top: 4px; color: #8b949e; font-size: 11px; line-height: 1.45; }
+
+/* Status siedzial w prawym gornym rogu, gdzie teraz jest panel szukania. Nie chowamy go pod
+   panelem - schodzi pod niego, bo licznik samolotow na zywo jest informacja o stanie polaczenia
+   i musi byc widoczny takze wtedy, gdy ktos szuka. */
+.status-pod-szukaniem { top: auto; bottom: 56px; right: 12px; }
+
+/* Legenda siedziala w prawym gornym rogu, gdzie teraz jest panel szukania - nachodzila na jego
+   tekst. Schodzi nad pasek odtwarzania, obok statusu: obie rzeczy sa stalymi objasnieniami mapy,
+   wiec ich miejsce jest przy mapie, a nie w obszarze, ktory sluzy do zadawania pytan. */
+.legend { top: auto; bottom: 88px; right: 12px; }

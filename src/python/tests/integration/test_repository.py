@@ -72,3 +72,46 @@ def test_insert_alerts_skips_duplicates(conn):
     c = DarkCandidate("rep003", 55.5, 17.5, datetime(2026, 9, 22, 11, 50, tzinfo=timezone.utc), 0.9, {"note": "x"})
     assert repo.insert_alerts(conn, "D1", [c]) == 1
     assert repo.insert_alerts(conn, "D1", [c]) == 0
+
+
+def test_insert_alert_rows_is_the_shared_write_behind_d1_and_the_maritime_detectors(conn):
+    # D1 gets there through insert_alerts(); D4/D6 write here directly (different dataclasses, same table).
+    rows = [("D6", "mmsi-anchor-1", datetime(2026, 9, 26, 20, 0, tzinfo=timezone.utc), 59.9, 25.0, 0.7, {"line": "x"})]
+    assert repo.insert_alert_rows(conn, rows) == 1
+    assert repo.insert_alert_rows(conn, rows) == 0   # sama para (detector, entity_id, started_at) -> duplikat
+    row = conn.execute("SELECT detector, entity_id, score FROM alert WHERE entity_id = 'mmsi-anchor-1'").fetchone()
+    assert row == ("D6", "mmsi-anchor-1", 0.7)
+
+
+def test_ship_positions_are_written_with_provenance_and_read_back_as_shipfix(conn):
+    ts = datetime(2026, 9, 27, 8, 0, tzinfo=timezone.utc)
+    fetched_at = datetime(2026, 9, 27, 8, 0, 5, tzinfo=timezone.utc)
+    ships = [
+        {"mmsi": "230123456", "ts": ts, "lat": 60.15, "lon": 24.95, "sog": 8.2, "cog": 91.0,
+         "name": "TESTOWIEC", "imo": "9123456", "ship_type": "70", "nav_status": "0"},
+        {"mmsi": "230999999", "ts": ts, "lat": 60.20, "lon": 24.99, "sog": None, "cog": None},
+    ]
+    n = repo.insert_ship_positions(conn, "digitraffic-ais", ships, fetched_at)
+    assert n == 2
+
+    fixes = repo.recent_ship_fixes(conn, ts - timedelta(minutes=1))
+    by_mmsi = {f.mmsi: f for f in fixes if f.mmsi in ("230123456", "230999999")}
+    assert by_mmsi["230123456"].name == "TESTOWIEC"
+    assert by_mmsi["230123456"].sog == 8.2
+    assert by_mmsi["230999999"].sog is None    # brakujaca predkosc nie ma stac sie zerem
+
+    source_id = conn.execute(
+        "SELECT source_id FROM ship_position WHERE mmsi = '230123456'"
+    ).fetchone()[0]
+    assert source_id == "digitraffic-ais"
+
+
+def test_recent_ship_fixes_excludes_positions_before_since(conn):
+    old = datetime(2026, 9, 20, 0, 0, tzinfo=timezone.utc)
+    new = datetime(2026, 9, 27, 9, 0, tzinfo=timezone.utc)
+    repo.insert_ship_positions(conn, "digitraffic-ais",
+                               [{"mmsi": "230111222", "ts": old, "lat": 60.0, "lon": 25.0}], old)
+    repo.insert_ship_positions(conn, "digitraffic-ais",
+                               [{"mmsi": "230111222", "ts": new, "lat": 60.0, "lon": 25.0}], new)
+    fixes = repo.recent_ship_fixes(conn, new - timedelta(minutes=1))
+    assert [f.ts for f in fixes if f.mmsi == "230111222"] == [new]

@@ -4,6 +4,7 @@ from datetime import datetime
 import h3
 import psycopg
 
+from wachta_detectors.anchor import ShipFix
 from wachta_detectors.coverage import COVERAGE_RESOLUTION
 from wachta_detectors.dark import DarkCandidate, LastSeen
 from wachta_detectors.jamming import JammingCell
@@ -89,16 +90,67 @@ def insert_d1_samples(conn: psycopg.Connection, samples: list[tuple[str, datetim
         )
 
 
-def insert_alerts(conn: psycopg.Connection, detector: str, candidates: list[DarkCandidate]) -> int:
+def insert_alert_rows(
+    conn: psycopg.Connection,
+    rows: list[tuple[str, str, datetime, float, float, float, dict]],
+) -> int:
+    """Generic alert write - (detector, entity_id, started_at, lat, lon, score, evidence) per row.
+
+    D1 candidates and D4/D6 candidates share nothing but this shape (DarkCandidate keys off `hex`,
+    GapAlert and AnchorAlert off `mmsi`), so the shared write lives here instead of being duplicated
+    per detector, or forcing every detector's dataclass to use the same field names.
+    """
     inserted = 0
-    for c in candidates:
+    for detector, entity_id, started_at, lat, lon, score, evidence in rows:
         cur = conn.execute(
             """INSERT INTO alert (detector, entity_id, started_at, lat, lon, score, evidence)
                VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
-            (detector, c.hex, c.last_seen, c.lat, c.lon, c.score, json.dumps(c.evidence)),
+            (detector, entity_id, started_at, lat, lon, score, json.dumps(evidence)),
         )
         inserted += cur.rowcount
     return inserted
+
+
+def insert_alerts(conn: psycopg.Connection, detector: str, candidates: list[DarkCandidate]) -> int:
+    return insert_alert_rows(
+        conn,
+        [(detector, c.hex, c.last_seen, c.lat, c.lon, c.score, c.evidence) for c in candidates],
+    )
+
+
+# --- Warstwa morska (AIS) ---------------------------------------------------
+# Digitraffic to jedno zrodlo dzis, ale kolumny mowia o kazdym: source_id i fetched_at licza sie tak
+# samo, jak przy samolotach - bez tego drugie zrodlo (AISStream) nie dalo by sie odroznic od pierwszego.
+
+def insert_ship_positions(
+    conn: psycopg.Connection,
+    source_id: str,
+    ships: list[dict],
+    fetched_at: datetime,
+) -> int:
+    """Write one AIS snapshot with provenance - mirrors how aircraft positions are ingested."""
+    if not ships:
+        return 0
+    with conn.cursor() as cur:
+        cur.executemany(
+            """INSERT INTO ship_position
+               (ts, mmsi, name, imo, ship_type, nav_status, lat, lon, sog_kt, cog_deg, source_id, fetched_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            [(
+                s["ts"], s["mmsi"], s.get("name"), s.get("imo"), s.get("ship_type"), s.get("nav_status"),
+                s["lat"], s["lon"], s.get("sog"), s.get("cog"), source_id, fetched_at,
+            ) for s in ships],
+        )
+    return len(ships)
+
+
+def recent_ship_fixes(conn: psycopg.Connection, since: datetime) -> list[ShipFix]:
+    """Ship positions since `since`, as ShipFix - the one shape both D4 and D6 consume."""
+    rows = conn.execute(
+        "SELECT mmsi, ts, lat, lon, sog_kt, cog_deg, name FROM ship_position WHERE ts >= %s",
+        (since,),
+    ).fetchall()
+    return [ShipFix(mmsi=r[0], ts=r[1], lat=r[2], lon=r[3], sog=r[4], cog=r[5], name=r[6]) for r in rows]
 
 
 # --- Odczyt dla serwera MCP -------------------------------------------------

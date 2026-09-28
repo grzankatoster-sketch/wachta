@@ -31,6 +31,36 @@ export function parseEvidence(raw: string | null | undefined): AlertEvidence {
   return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as AlertEvidence) : {};
 }
 
+import { zapytanie } from "./search-view";
+
+export interface SearchHit {
+  id: string;
+  text: string;
+  score: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface SearchResult {
+  query: string;
+  model: string;
+  minScore: number;
+  found: number;
+  hits: SearchHit[];
+  caveat: string;
+}
+
+/**
+ * Searches the corpus by meaning.
+ *
+ * An empty `hits` is an ANSWER, not a failure: it means nothing in the corpus passed the similarity
+ * floor. The caller must not turn that into "something went wrong", because the two look the same
+ * on screen and mean the opposite. A model outage is a thrown error instead, so the difference
+ * survives all the way to the user.
+ */
+export async function search(query: string, kind?: string, limit = 8): Promise<SearchResult> {
+  return getJSON<SearchResult>(`/api/search?${zapytanie(query, kind, limit)}`);
+}
+
 export async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
