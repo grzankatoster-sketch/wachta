@@ -2,6 +2,11 @@ import DeckGL from "@deck.gl/react";
 import type { Layer, MapViewState, PickingInfo } from "@deck.gl/core";
 import { Map } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { configureMaplibreWorker } from "../maplibre-worker";
+
+// Musi pasc przed pierwszym <Map>: MapLibre czyta config.WORKER_URL dopiero przy tworzeniu mapy,
+// ale pozniejsza zmiana nie odratuje juz puli workerow zbudowanej na zlym adresie.
+configureMaplibreWorker();
 
 export const BALTIC_VIEW: MapViewState = { longitude: 20, latitude: 57, zoom: 5 };
 const STYLE = "https://tiles.openfreemap.org/styles/positron";

@@ -1,3 +1,4 @@
+import { parseEvidence } from "../api";
 import type { AlertDto } from "../api";
 
 const LABELS: Record<string, string> = { D1: "Zgaszony transponder" };
@@ -9,7 +10,7 @@ export function AlertsPanel({ alerts, onSelect }: { alerts: AlertDto[]; onSelect
       {alerts.length === 0 && <p className="muted">Brak alarmów z ostatnich 24 h.</p>}
       <ul>
         {alerts.map((a) => {
-          const ev = JSON.parse(a.evidence) as { flight?: string; type_code?: string; gap_minutes?: number };
+          const ev = parseEvidence(a.evidence);
           return (
             <li key={a.id}>
               <button onClick={() => onSelect(a)}>

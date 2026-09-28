@@ -6,6 +6,9 @@ export default defineConfig({
   // MapLibre ships its renderer as a web worker; Vite's dependency pre-bundling rewrites the worker
   // URL and the map stays blank ("Worker failed to load") in dev.
   optimizeDeps: { exclude: ["maplibre-gl"] },
+  // Worker MapLibre jest modulem ES i importuje ./maplibre-gl-shared.mjs; domyslny format iife
+  // wywalilby ten import przy budowaniu.
+  worker: { format: "es" },
   server: {
     proxy: {
       "/api": "http://localhost:8080",

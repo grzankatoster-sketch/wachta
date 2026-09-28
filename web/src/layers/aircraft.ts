@@ -1,7 +1,7 @@
 import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import type { LiveAircraft } from "../api";
-import { aircraftColor } from "../colors";
+import { LABEL, aircraftColor } from "../colors";
 
 export function aircraftLayers(data: LiveAircraft[]): Layer[] {
   const airborne = data.filter((a) => !a.onGround);
@@ -21,7 +21,8 @@ export function aircraftLayers(data: LiveAircraft[]): Layer[] {
       getPosition: (a) => [a.lon, a.lat],
       getText: (a) => `${a.flight ?? a.hex} ${a.typeCode ?? ""}`.trim(),
       getSize: 11,
-      getColor: [240, 240, 240],
+      // Podklad positron jest jasny - bialy napis byl na nim niewidoczny mimo poprawnego renderu.
+      getColor: LABEL,
       getPixelOffset: [0, -14],
     }),
   ];

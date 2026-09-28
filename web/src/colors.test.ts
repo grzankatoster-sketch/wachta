@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aircraftColor, jammingColor } from "./colors";
+import { BASEMAP_LAND, BASEMAP_SEA, LABEL, aircraftColor, contrastRatio, jammingColor } from "./colors";
 import type { LiveAircraft } from "./api";
 
 const base: LiveAircraft = {
@@ -19,5 +19,23 @@ describe("jammingColor", () => {
     expect(jammingColor(0.01)[3]).toBe(0);
     expect(jammingColor(0.05)).toEqual([255, 190, 0, 110]);
     expect(jammingColor(0.2)).toEqual([230, 57, 70, 150]);
+  });
+});
+
+describe("etykiety samolotow", () => {
+  it("sa czytelne na jasnym podkladzie positron", () => {
+    // Etykiety byly [240,240,240] na tle [242,243,240]: render dzialal, napisu nie dalo sie odczytac.
+    expect(contrastRatio(LABEL, BASEMAP_LAND)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("sa czytelne takze nad morzem, czyli na najciemniejszej powierzchni podkladu", () => {
+    expect(contrastRatio(LABEL, BASEMAP_SEA)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("contrastRatio", () => {
+  it("liczy skrajne przypadki wg WCAG", () => {
+    expect(contrastRatio([0, 0, 0], [255, 255, 255])).toBeCloseTo(21, 1);
+    expect(contrastRatio([120, 120, 120], [120, 120, 120])).toBeCloseTo(1, 5);
   });
 });
