@@ -11,7 +11,22 @@ export interface JammingDto { h3: string; nAircraft: number; nDegraded: number }
 export interface ReplayPath { hex: string; flight: string | null; typeCode: string | null; path: [number, number][]; timestamps: number[] }
 export interface SourceInfo { id: string; name: string; url: string; license: string; trustTier: number; attribution: string }
 
-export interface AlertEvidence { flight?: string; type_code?: string; gap_minutes?: number }
+/** Free-form jsonb: every detector writes its own shape, so every field is optional and unknown
+ * keys are allowed. Reading it as one fixed shape is what made maritime alerts render as "?". */
+export interface AlertEvidence {
+  flight?: string;
+  type_code?: string;
+  gap_minutes?: number;
+  name?: string;
+  mmsi?: string;
+  duration_minutes?: number;
+  shift_km?: number;
+  min_distance_km?: number;
+  line_name?: string;
+  listeners?: number;
+  implied_kt?: number;
+  [inne: string]: unknown;
+}
 
 /**
  * Reads an alert's `evidence` column, which is free-form jsonb written by the Python detectors.

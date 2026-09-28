@@ -1,7 +1,6 @@
 import { parseEvidence } from "../api";
 import type { AlertDto } from "../api";
-
-const LABELS: Record<string, string> = { D1: "Zgaszony transponder" };
+import { dopisek, NAZWY, podmiot, szczegoly } from "../alert-text";
 
 export function AlertsPanel({ alerts, onSelect }: { alerts: AlertDto[]; onSelect: (a: AlertDto) => void }) {
   return (
@@ -14,10 +13,12 @@ export function AlertsPanel({ alerts, onSelect }: { alerts: AlertDto[]; onSelect
           return (
             <li key={a.id}>
               <button onClick={() => onSelect(a)}>
-                <strong>{LABELS[a.detector] ?? a.detector}</strong> · {ev.flight ?? a.entityId} {ev.type_code ?? ""}
+                <strong>{NAZWY[a.detector] ?? a.detector}</strong> · {podmiot(ev, a.entityId)}{" "}
+                {dopisek(ev)}
                 <br />
                 <span className="muted">
-                  {new Date(a.startedAt).toLocaleString("pl-PL")} · luka {ev.gap_minutes ?? "?"} min · wynik {a.score}
+                  {[new Date(a.startedAt).toLocaleString("pl-PL"), ...szczegoly(ev),
+                    `wynik ${a.score}`].join(" · ")}
                 </span>
               </button>
             </li>
