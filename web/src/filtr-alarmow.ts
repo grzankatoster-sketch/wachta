@@ -45,8 +45,18 @@ export function odfiltruj(alerts: AlertDto[], detektor: string | null): AlertDto
  *
  * "No alerts at all" is the system saying the last day was quiet. "None of this kind" is the
  * reader's own filter. Showing the same sentence for both makes a filter look like an outage.
+ *
+ * And the third: nothing is connected, so nobody knows. That one used to borrow the first one's
+ * sentence - with the API stopped the panel read "Detektory liczą - po prostu nic nie znalazły",
+ * which is a claim the application was in no position to make. On a watch board the difference
+ * between "checked, quiet" and "we cannot see" is the whole point; an outage that reads as an
+ * all-clear is worse than a blank panel. Found in the usability audit of 2026-09-28 by stopping
+ * the api container, and reproduced here.
  */
-export function pustaLista(wszystkich: number, detektor: string | null): string {
+export function pustaLista(wszystkich: number, detektor: string | null, polaczone = true): string {
+  if (!polaczone) {
+    return "Brak połączenia z serwerem. To nie znaczy, że nic się nie dzieje - znaczy, że nic nie widzimy.";
+  }
   if (wszystkich === 0) return "Brak alarmów z ostatnich 24 h. Detektory liczą - po prostu nic nie znalazły.";
   return `Żaden alarm z ostatnich 24 h nie jest tego typu (${NAZWY[detektor ?? ""] ?? detektor}). Wybierz „wszystkie”, żeby zobaczyć pozostałe.`;
 }

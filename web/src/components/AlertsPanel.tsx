@@ -4,7 +4,8 @@ import type { AlertDto } from "../api";
 import { dopisek, NAZWY, podmiot, szczegoly } from "../alert-text";
 import { grupy, odfiltruj, pustaLista } from "../filtr-alarmow";
 
-export function AlertsPanel({ alerts, onSelect }: { alerts: AlertDto[]; onSelect: (a: AlertDto) => void }) {
+export function AlertsPanel({ alerts, onSelect, polaczone = true }:
+  { alerts: AlertDto[]; onSelect: (a: AlertDto) => void; polaczone?: boolean }) {
   const [detektor, setDetektor] = useState<string | null>(null);
   const widoczne = odfiltruj(alerts, detektor);
 
@@ -26,7 +27,7 @@ export function AlertsPanel({ alerts, onSelect }: { alerts: AlertDto[]; onSelect
           </button>
         ))}
       </div>
-      {widoczne.length === 0 && <p className="muted">{pustaLista(alerts.length, detektor)}</p>}
+      {widoczne.length === 0 && <p className="muted">{pustaLista(alerts.length, detektor, polaczone)}</p>}
       <ul>
         {widoczne.map((a) => {
           const ev = parseEvidence(a.evidence);

@@ -71,3 +71,20 @@ describe("pusta lista mowi, KTORA pustka to jest", () => {
     expect(tekst).not.toMatch(/Detektory liczą/);
   });
 });
+
+describe("pusta lista a brak polaczenia", () => {
+  it("nie twierdzi, ze detektory cos sprawdzily, kiedy nie ma polaczenia", () => {
+    const tekst = pustaLista(0, null, false);
+    expect(tekst).toMatch(/Brak połączenia/);
+    expect(tekst).not.toMatch(/nic nie znalazły/);
+  });
+
+  it("po polaczeniu pusta lista nadal znaczy cisze", () => {
+    expect(pustaLista(0, null, true)).toMatch(/nic nie znalazły/);
+  });
+
+  it("brak polaczenia jest wazniejszy niz wybrany filtr", () => {
+    // Inaczej przy padnietym API filtr tlumaczylby pustke swoim istnieniem.
+    expect(pustaLista(5, "D5", false)).toMatch(/Brak połączenia/);
+  });
+});

@@ -66,6 +66,13 @@ export default function App() {
   const widoczneAlarmy = widoczne.alarmy ? alerts : [];
   const widoczneZaklocenia = widoczne.zaklocenia ? jamming : [];
 
+  // Wiek najswiezszej pozycji. Wczesniej szlo tu null, wiec zdanie o swiezosci nigdy sie nie
+  // pokazywalo - mapa wygladala tak samo, czy dane mialy 5 sekund, czy przyszly ostatni raz kwadrans
+  // temu. Brak danych zostaje nullem: "nie wiem, ile to ma lat" to nie to samo co "jest swieze".
+  const sekundOdOdczytu = aircraft.length
+    ? Math.max(0, Math.round((Date.now() - Math.max(...aircraft.map((a) => Date.parse(a.ts)))) / 1000))
+    : null;
+
   const liczby = {
     wojskowe: aircraft.filter((a) => a.isMilitary && !a.onGround).length,
     cywilne: aircraft.filter((a) => !a.isMilitary && !a.onGround).length,
@@ -86,7 +93,18 @@ export default function App() {
         onObjectClick={(o) => setWybrany(selectionFromPicked(o))}
       />
       {wybrany && <DetailPanel szczegoly={zbudujSzczegoly(wybrany)} onClose={() => setWybrany(null)} />}
-      <AlertsPanel alerts={alerts} onSelect={(a) => setView({ ...view, longitude: a.lon, latitude: a.lat, zoom: 8 })} />
+      <AlertsPanel
+        alerts={alerts}
+        polaczone={connected}
+        onSelect={(a) => {
+          // Lista otwiera ten sam panel co klikniecie w mape. Wczesniej robila tylko setView, wiec
+          // analiza - "co to jest, co z tego wynika, na jakiej podstawie" - byla dostepna wylacznie
+          // przez trafienie mysza w kilkupikselowy znacznik na canvasie deck.gl. Bez myszy nie bylo
+          // jej wcale, a przy kilku alarmach w jednym miejscu trafialo sie w sasiada.
+          setView({ ...view, longitude: a.lon, latitude: a.lat, zoom: 8 });
+          setWybrany({ kind: "alert", data: a });
+        }}
+      />
       <SearchPanel />
       <header className="naglowek">
         <h1>WACHTA</h1>
@@ -95,7 +113,7 @@ export default function App() {
           własne detektory uznały za warte sprawdzenia. Każdy alarm jest <b>kandydatem do
           sprawdzenia</b>, nigdy wyrokiem.
         </p>
-        <p className="stan">{stanDanych(connected, liczby.wojskowe + liczby.cywilne, null)}</p>
+        <p className="stan">{stanDanych(connected, liczby.wojskowe + liczby.cywilne, sekundOdOdczytu)}</p>
       </header>
       <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
       <ReplayBar

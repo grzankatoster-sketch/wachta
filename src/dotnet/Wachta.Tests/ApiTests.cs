@@ -24,12 +24,13 @@ public sealed class ApiTests : IAsyncLifetime
         await using var conn = new NpgsqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = new NpgsqlCommand("""
-            DELETE FROM aircraft_position WHERE hex IN ('api001','api002','api003');
+            DELETE FROM aircraft_position WHERE hex IN ('api001','api002','api003','api004');
             INSERT INTO aircraft_position (ts, hex, flight, type_code, is_military, lat, lon, alt_baro_ft, on_ground, gs_kt, track_deg, nic, nac_p, source_id, fetched_at) VALUES
               (now() - interval '90 seconds', 'api001', 'OLD1', 'K35R', true,  55.0, 19.0, 25000, false, 400, 90, 8, 9, 'adsblol-mil', now()),
               (now() - interval '10 seconds', 'api001', 'NEW1', 'K35R', true,  55.1, 19.2, 25000, false, 400, 90, 8, 9, 'adsblol-mil', now()),
               (now() - interval '10 seconds', 'api002', 'CIV1', 'A320', false, 54.0, 18.0, 36000, false, 450, 45, 8, 9, 'adsblol-baltic-s', now()),
-              (now() - interval '10 minutes', 'api003', 'GONE', 'C17',  true,  56.0, 20.0, 30000, false, 420, 10, 8, 9, 'adsblol-mil', now());
+              (now() - interval '10 minutes', 'api003', 'GONE', 'C17',  true,  56.0, 20.0, 30000, false, 420, 10, 8, 9, 'adsblol-mil', now()),
+              (now() - interval '10 seconds', 'api004', 'FARAWAY', 'C17', true, 33.9, -118.4, 30000, false, 420, 10, 8, 9, 'adsblol-mil', now());
             """, conn);
         await cmd.ExecuteNonQueryAsync();
     }
@@ -58,6 +59,23 @@ public sealed class ApiTests : IAsyncLifetime
         var live = await _client.GetFromJsonAsync<List<LiveAircraft>>("/api/aircraft/live?minLat=53&minLon=17&maxLat=54.5&maxLon=18.5");
         Assert.Contains(live!, a => a.Hex == "api002");
         Assert.DoesNotContain(live!, a => a.Hex == "api001");
+    }
+
+    [DockerFact]
+    public async Task The_map_is_not_sent_military_traffic_from_other_continents()
+    {
+        // adsb.lol's military endpoint is worldwide, the area ones are not. Broadcasting the first
+        // unbounded put ~300 aircraft from other continents into every update: never visible at the
+        // Baltic zoom, always counted, so the header read "446 aircraft in range, 58% military".
+        // Mutacja: usuniecie granic z CurrentAircraft przywraca api004 i wywraca ten test.
+        await using var conn = new NpgsqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        var live = await LiveBroadcaster.CurrentAircraft(conn);
+
+        Assert.DoesNotContain(live, a => a.Hex == "api004");
+        Assert.Contains(live, a => a.Hex == "api001");   // wojskowy W obszarze zostaje
+        Assert.Contains(live, a => a.Hex == "api002");   // cywilny tez
+        Assert.All(live, a => Assert.True(LiveBroadcaster.Area.Contains(a.Lat, a.Lon), $"{a.Hex} poza obszarem"));
     }
 
     [DockerFact]

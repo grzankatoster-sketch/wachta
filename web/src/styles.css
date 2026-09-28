@@ -229,7 +229,18 @@ body {
   top: 152px;
   left: 12px;
   width: 330px;
-  max-height: calc(100vh - 360px);
+  /* Wysokosc liczona z miejsca, ktore zajmuje panel alarmow, a nie ze stalej.
+     Panel siedzi przy dole: bottom 56px, max-height 38vh - ale max-height ogranicza PUDELKO
+     TRESCI, wiec jego 12px dopelnienia z gory i z dolu dochodzi osobno. Panel ma realnie
+     38vh + 24px, czyli jego gora jest na 62vh - 80px. Legenda ma skonczyc 12px nad nia i sama
+     ma 10px + 12px dopelnienia, ktore tez nie wchodza w max-height:
+        62vh - 80 - 152 (gora legendy) - 12 (odstep) - 22 (dopelnienie legendy) = 62vh - 266px.
+     Poprzednie "100vh - 360px" nie wiedzialo nic o panelu i przy 1366x768 bloki nachodzily na
+     siebie o ~60px - wiersz "Zaklocenia GPS" znikal pod naglowkiem listy alarmow. Pierwsza
+     poprawka liczyla 62vh - 220px i zostawiala 34px zakladu, bo pomijala wlasnie te dopelnienia:
+     ten sam blad co kiedys przy szerokosci panelu szczegolow (380 zamiast 416). Zmierzone
+     przez getBoundingClientRect w przegladarce, nie policzone na oko. */
+  max-height: calc(62vh - 266px);
   overflow-y: auto;
   padding: 10px 14px 12px;
   background: #0d1117e6;

@@ -26,7 +26,7 @@ export const WARSTWY: OpisWarstwy[] = [
   {
     id: "wojskowe",
     nazwa: "Samoloty wojskowe",
-    opis: "Oznaczone jako wojskowe przez adsb.lol. Wiele maszyn nie nadaje ADS-B wcale — widać tylko te, które nadają.",
+    opis: "Oznaczone jako wojskowe przez adsb.lol, ograniczone do obserwowanego obszaru. Wiele maszyn nie nadaje ADS-B wcale — widać tylko te, które nadają.",
     kolor: rgb(RED),
     ksztalt: "kropka",
   },
@@ -89,6 +89,12 @@ export function policz(
  *
  * Freshness is not decoration. Every layer here is a snapshot of a moment, and a map that does not
  * say when it was taken invites the reader to assume it is now.
+ *
+ * The count names its area instead of saying "in range", because those were different numbers
+ * until 2026-09-28. The military feed is worldwide and was broadcast unbounded, so the header
+ * counted around three hundred aircraft on other continents - a 58% military share over a sea where
+ * the measured figure is 5%. The broadcast is bounded now (WatchedArea.Baltic, 48-70 N / 0-40 E);
+ * naming the area is what lets the number be checked against anything.
  */
 export function stanDanych(polaczone: boolean, samolotow: number, sekundOdOdczytu: number | null): string {
   if (!polaczone) return "Łączenie z serwerem…";
@@ -99,5 +105,5 @@ export function stanDanych(polaczone: boolean, samolotow: number, sekundOdOdczyt
       : sekundOdOdczytu < 60
         ? " · dane sprzed chwili"
         : ` · dane sprzed ${Math.round(sekundOdOdczytu / 60)} min`;
-  return `${samolotow} samolotów w zasięgu${wiek}`;
+  return `${samolotow} samolotów w obserwowanym obszarze (Bałtyk i podejścia)${wiek}`;
 }
