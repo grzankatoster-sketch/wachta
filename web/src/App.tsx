@@ -93,18 +93,6 @@ export default function App() {
         onObjectClick={(o) => setWybrany(selectionFromPicked(o))}
       />
       {wybrany && <DetailPanel szczegoly={zbudujSzczegoly(wybrany)} onClose={() => setWybrany(null)} />}
-      <AlertsPanel
-        alerts={alerts}
-        polaczone={connected}
-        onSelect={(a) => {
-          // Lista otwiera ten sam panel co klikniecie w mape. Wczesniej robila tylko setView, wiec
-          // analiza - "co to jest, co z tego wynika, na jakiej podstawie" - byla dostepna wylacznie
-          // przez trafienie mysza w kilkupikselowy znacznik na canvasie deck.gl. Bez myszy nie bylo
-          // jej wcale, a przy kilku alarmach w jednym miejscu trafialo sie w sasiada.
-          setView({ ...view, longitude: a.lon, latitude: a.lat, zoom: 8 });
-          setWybrany({ kind: "alert", data: a });
-        }}
-      />
       <SearchPanel />
       <div className="lewa-kolumna">
         <header className="naglowek">
@@ -117,6 +105,19 @@ export default function App() {
         <p className="stan">{stanDanych(connected, liczby.wojskowe + liczby.cywilne, sekundOdOdczytu)}</p>
         </header>
         <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
+        <AlertsPanel
+          alerts={alerts}
+          polaczone={connected}
+          wybranyId={wybrany?.kind === "alert" ? wybrany.data.id : null}
+          onSelect={(a) => {
+            // Lista otwiera ten sam panel co klikniecie w mape. Wczesniej robila tylko setView, wiec
+            // analiza - "co to jest, co z tego wynika, na jakiej podstawie" - byla dostepna wylacznie
+            // przez trafienie mysza w kilkupikselowy znacznik na canvasie deck.gl. Bez myszy nie bylo
+            // jej wcale, a przy kilku alarmach w jednym miejscu trafialo sie w sasiada.
+            setView({ ...view, longitude: a.lon, latitude: a.lat, zoom: 8 });
+            setWybrany({ kind: "alert", data: a });
+          }}
+        />
       </div>
       <ReplayBar
         active={!!replay}

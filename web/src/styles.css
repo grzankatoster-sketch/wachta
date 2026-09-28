@@ -20,11 +20,8 @@ body {
 }
 
 .panel {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  bottom: 48px;
-  width: 340px;
+  width: 100%;
+  box-sizing: border-box;
   overflow-y: auto;
   background: #0d1117e6;
   border-radius: 8px;
@@ -221,8 +218,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  /* Dol kolumny 12px nad panelem alarmow, ktorego gora jest na 62vh - 80px (patrz .warstwy). */
-  max-height: calc(62vh - 104px);
+  /* Az do paska odtwarzania na dole. Trzy bloki dziela sie ta wysokoscia miedzy soba, zamiast
+     kazdy zgadywac swoja z osobna - to ostatnia z trzech stalych, ktore o sobie nie wiedzialy. */
+  bottom: 56px;
 }
 
 .naglowek {
@@ -241,9 +239,12 @@ body {
    legenda, ktora da sie kliknac, jest najszybszym sposobem na sprawdzenie, co znaczyl dany znak -
    wylacz go i zobacz, co znikneło. */
 .warstwy {
-  /* W kolumnie: schodzi pod naglowek sam z siebie i kurczy sie, gdy brakuje miejsca. */
-  flex: 0 1 auto;
-  min-height: 0;
+  /* Legenda jest jedynym wyjasnieniem mapy i NIE kurczy sie pod naciskiem listy alarmow:
+     "flex: 0 1 auto" obok rosnacej listy zgniotlo ja do samego naglowka - zniknely wszystkie
+     cztery wiersze, czyli dokladnie to, co ta przebudowa miala naprawic. Gorna granica jest
+     po to, zeby przy bardzo niskim oknie legenda nie wypchnela listy: wtedy przewija sie sama. */
+  flex: 0 0 auto;
+  max-height: 45vh;
   width: 100%;
   box-sizing: border-box;
   /* Bez max-height: kolumna wyzej ogranicza calosc, a "min-height: 0" pozwala tej pozycji
@@ -255,6 +256,30 @@ body {
   background: #0d1117e6;
   border-radius: 8px;
 }
+/* Na niskim oknie (1366x768, 1280x800) nie mieszcza sie naraz: legenda z opisami, lista alarmow
+   i naglowek. Z opisami lista schodzila do zera pozycji - zostawaly same filtry, czyli widok
+   obiecywal alarmy i zadnego nie pokazywal. Opisy sa nauka jednorazowa, nazwy z liczbami zostaja
+   na stale, a legenda i tak tlumaczy sie klikaniem: wylacz warstwe i zobacz, co znikneło.
+   Prog 950px z pomiaru: przy 900px z opisami lista dawala 1 pozycje, bez nich 4; przy 1080px
+   opisy mieszcza sie i lista i tak ma 4. */
+@media (max-height: 950px) {
+  .warstwy li p { display: none; }
+  .warstwy li { margin-bottom: 4px; }
+}
+
+.warstwy .obszar {
+  margin: -4px 0 10px;
+  font-size: 11px;
+  color: #6e7681;
+}
+
+/* Otwarty alarm jest widoczny na liscie. Bez tego otwierasz panel szczegolow i nie masz jak
+   sprawdzic, ktorej pozycji dotyczy - ani wracajac do listy, ani patrzac na mape. */
+.panel li > button[aria-current] {
+  background: #1f6feb26;
+  box-shadow: inset 3px 0 0 #58a6ff;
+}
+
 .warstwy h2 { margin: 0 0 8px; font-size: 13px; color: #8b949e; font-weight: 600; }
 .warstwy ul { list-style: none; margin: 0; padding: 0; }
 .warstwy li { margin-bottom: 9px; }
@@ -300,9 +325,11 @@ body {
   color: #e3b341;
 }
 
-/* Panel alarmow schodzi pod legende. Kolejnosc od gory jest kolejnoscia czytania: czym to jest,
-   co na tym widac, co system znalazl. */
-.panel { top: auto; bottom: 56px; max-height: 38vh; }
+/* Panel alarmow jest ostatni w kolumnie i zjada to, co zostalo. Kolejnosc od gory jest kolejnoscia
+   czytania: czym to jest, co na tym widac, co system znalazl.
+   "flex: 1 1 auto" zamiast stalego 38vh - stala wysokosc zostawiala na ekranie 2560x1440 wielka
+   dziure miedzy legenda a lista, a na 1366x768 sciskala jedno i drugie. */
+.panel { flex: 1 1 auto; min-height: 120px; }
 
 /* Panel szczegolow wchodzi z prawej i zajmuje to samo miejsce co wyszukiwanie. Zamiast go
    przykrywac - odsuwamy szukanie, zeby oba byly czytelne. Klikniecie w obiekt jest w tym momencie

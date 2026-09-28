@@ -4,8 +4,8 @@ import type { AlertDto } from "../api";
 import { dopisek, NAZWY, podmiot, szczegoly } from "../alert-text";
 import { grupy, odfiltruj, pustaLista } from "../filtr-alarmow";
 
-export function AlertsPanel({ alerts, onSelect, polaczone = true }:
-  { alerts: AlertDto[]; onSelect: (a: AlertDto) => void; polaczone?: boolean }) {
+export function AlertsPanel({ alerts, onSelect, polaczone = true, wybranyId = null }:
+  { alerts: AlertDto[]; onSelect: (a: AlertDto) => void; polaczone?: boolean; wybranyId?: number | null }) {
   const [detektor, setDetektor] = useState<string | null>(null);
   const widoczne = odfiltruj(alerts, detektor);
 
@@ -33,7 +33,8 @@ export function AlertsPanel({ alerts, onSelect, polaczone = true }:
           const ev = parseEvidence(a.evidence);
           return (
             <li key={a.id}>
-              <button onClick={() => onSelect(a)}>
+              {/* aria-current, nie sam kolor: czytnik ekranu tez ma wiedziec, ktory alarm jest otwarty. */}
+              <button onClick={() => onSelect(a)} aria-current={a.id === wybranyId || undefined}>
                 <strong>{NAZWY[a.detector] ?? a.detector}</strong> · {podmiot(ev, a.entityId)}{" "}
                 {dopisek(ev)}
                 <br />

@@ -53,6 +53,13 @@ export const WARSTWY: OpisWarstwy[] = [
   },
 ];
 
+/** The bounds behind every count on this screen, written out so a reader can check them. */
+export const OBSZAR = { minLat: 48, maxLat: 70, minLon: 0, maxLon: 40 };
+
+export function opisObszaru(): string {
+  return `Obszar: ${OBSZAR.minLat}–${OBSZAR.maxLat}°N, ${OBSZAR.minLon}–${OBSZAR.maxLon}°E`;
+}
+
 export type Widoczne = Record<IdWarstwy, boolean>;
 
 export const WSZYSTKO_WIDOCZNE: Widoczne = {
@@ -95,6 +102,11 @@ export function policz(
  * counted around three hundred aircraft on other continents - a 58% military share over a sea where
  * the measured figure is 5%. The broadcast is bounded now (WatchedArea.Baltic, 48-70 N / 0-40 E);
  * naming the area is what lets the number be checked against anything.
+ *
+ * The name is "obserwowany obszar" and the bounds are printed in the legend, because the first
+ * wording - "Baltyk i podejscia" - was itself untrue: 48-70 N / 0-40 E takes in Paris, Prague,
+ * Vienna and Moscow. Seen by looking at the map at 2560px, where red military marks sit over
+ * Luxembourg and Warsaw, which is nobody's idea of a Baltic approach.
  */
 export function stanDanych(polaczone: boolean, samolotow: number, sekundOdOdczytu: number | null): string {
   if (!polaczone) return "Łączenie z serwerem…";
@@ -105,5 +117,5 @@ export function stanDanych(polaczone: boolean, samolotow: number, sekundOdOdczyt
       : sekundOdOdczytu < 60
         ? " · dane sprzed chwili"
         : ` · dane sprzed ${Math.round(sekundOdOdczytu / 60)} min`;
-  return `${samolotow} samolotów w obserwowanym obszarze (Bałtyk i podejścia)${wiek}`;
+  return `${samolotow} samolotów w obserwowanym obszarze${wiek}`;
 }

@@ -1,4 +1,4 @@
-import { przelacz, WARSTWY, wszystkoWylaczone, type IdWarstwy, type Widoczne } from "../warstwy";
+import { opisObszaru, przelacz, WARSTWY, wszystkoWylaczone, type IdWarstwy, type Widoczne } from "../warstwy";
 
 /**
  * The key to the map, which is also the switch for it.
@@ -20,6 +20,7 @@ export function Warstwy({
   return (
     <section className="warstwy" aria-label="Co widać na mapie">
       <h2>Co widać na mapie</h2>
+      <p className="obszar">{opisObszaru()}</p>
       <ul>
         {WARSTWY.map((w) => {
           const wlaczona = widoczne[w.id];
