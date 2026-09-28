@@ -106,7 +106,8 @@ export default function App() {
         }}
       />
       <SearchPanel />
-      <header className="naglowek">
+      <div className="lewa-kolumna">
+        <header className="naglowek">
         <h1>WACHTA</h1>
         <p>
           Co widać z danych publicznych: ruch lotniczy i morski, zakłócenia GPS, oraz miejsca, które
@@ -114,8 +115,9 @@ export default function App() {
           sprawdzenia</b>, nigdy wyrokiem.
         </p>
         <p className="stan">{stanDanych(connected, liczby.wojskowe + liczby.cywilne, sekundOdOdczytu)}</p>
-      </header>
-      <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
+        </header>
+        <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
+      </div>
       <ReplayBar
         active={!!replay}
         onToggle={toggleReplay}

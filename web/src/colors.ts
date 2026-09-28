@@ -1,7 +1,16 @@
 import type { LiveAircraft } from "./api";
 
 export const RED: [number, number, number] = [230, 57, 70];
-export const GREY: [number, number, number] = [150, 160, 170];
+/**
+ * Civil aircraft. Dark enough to be seen on the basemap, light enough to stay background.
+ *
+ * Was [150,160,170], which scored 1.57:1 against the sea and 2.38:1 against land - under the 3:1
+ * that WCAG 1.4.11 asks of a graphic carrying meaning, and in practice the civil traffic simply
+ * disappeared over water, which is most of this map. Measured with contrastRatio() below:
+ * land 5.15:1, sea 3.39:1, and 3.30:1 on the dark legend panel, so one value works on all three
+ * and the legend still speaks the same colour as the map.
+ */
+export const GREY: [number, number, number] = [96, 103, 110];
 
 /** Land fill of the OpenFreeMap "positron" basemap, sampled from a rendered tile. */
 export const BASEMAP_LAND: [number, number, number] = [242, 243, 240];

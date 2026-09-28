@@ -208,11 +208,27 @@ body {
 /* NAGLOWEK. Pierwsza rzecz, ktora ktos czyta, i jedyna szansa, zeby powiedziec, na co patrzy.
    Bez tego aplikacja zaczyna sie od kropek na mapie - a pierwsza osoba, ktora ja otworzyla,
    powiedziala doslownie "nie wiem o co chodzi, jakies kropki". */
-.naglowek {
+/* Naglowek i legenda stoja w JEDNEJ kolumnie, jedno pod drugim.
+   Wczesniej byly to dwa niezalezne bloki position:absolute, a legenda miala staly "top: 152px" -
+   liczbe wzieta z owczesnej wysokosci naglowka. Wystarczylo, ze zdanie w naglowku uroslo o jedna
+   linijke (przy nazwaniu obserwowanego obszaru), i legenda wchodzila mu na tekst. Kolumna nie ma
+   tego problemu, bo nie zna zadnej z tych wysokosci z gory. */
+.lewa-kolumna {
   position: absolute;
   top: 12px;
   left: 12px;
   width: 330px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Dol kolumny 12px nad panelem alarmow, ktorego gora jest na 62vh - 80px (patrz .warstwy). */
+  max-height: calc(62vh - 104px);
+}
+
+.naglowek {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
   padding: 12px 14px;
   background: #0d1117f0;
   border-radius: 8px;
@@ -225,22 +241,15 @@ body {
    legenda, ktora da sie kliknac, jest najszybszym sposobem na sprawdzenie, co znaczyl dany znak -
    wylacz go i zobacz, co znikneło. */
 .warstwy {
-  position: absolute;
-  top: 152px;
-  left: 12px;
-  width: 330px;
-  /* Wysokosc liczona z miejsca, ktore zajmuje panel alarmow, a nie ze stalej.
-     Panel siedzi przy dole: bottom 56px, max-height 38vh - ale max-height ogranicza PUDELKO
-     TRESCI, wiec jego 12px dopelnienia z gory i z dolu dochodzi osobno. Panel ma realnie
-     38vh + 24px, czyli jego gora jest na 62vh - 80px. Legenda ma skonczyc 12px nad nia i sama
-     ma 10px + 12px dopelnienia, ktore tez nie wchodza w max-height:
-        62vh - 80 - 152 (gora legendy) - 12 (odstep) - 22 (dopelnienie legendy) = 62vh - 266px.
-     Poprzednie "100vh - 360px" nie wiedzialo nic o panelu i przy 1366x768 bloki nachodzily na
-     siebie o ~60px - wiersz "Zaklocenia GPS" znikal pod naglowkiem listy alarmow. Pierwsza
-     poprawka liczyla 62vh - 220px i zostawiala 34px zakladu, bo pomijala wlasnie te dopelnienia:
-     ten sam blad co kiedys przy szerokosci panelu szczegolow (380 zamiast 416). Zmierzone
-     przez getBoundingClientRect w przegladarce, nie policzone na oko. */
-  max-height: calc(62vh - 266px);
+  /* W kolumnie: schodzi pod naglowek sam z siebie i kurczy sie, gdy brakuje miejsca. */
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  /* Bez max-height: kolumna wyzej ogranicza calosc, a "min-height: 0" pozwala tej pozycji
+     sie skurczyc, zeby overflow-y nizej mial co przewijac. Dwie stale wysokosci, ktore nie
+     wiedzialy o sobie nawzajem, kosztowaly tu dwa osobne nachodzenia:
+     legenda na panel alarmow (1366x768) i naglowek pod legenda (po wydluzeniu zdania). */
   overflow-y: auto;
   padding: 10px 14px 12px;
   background: #0d1117e6;

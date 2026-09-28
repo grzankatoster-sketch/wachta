@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASEMAP_LAND, BASEMAP_SEA, LABEL, aircraftColor, contrastRatio, jammingColor } from "./colors";
+import { BASEMAP_LAND, BASEMAP_SEA, GREY, LABEL, RED, aircraftColor, contrastRatio, jammingColor } from "./colors";
 import type { LiveAircraft } from "./api";
 
 const base: LiveAircraft = {
@@ -9,8 +9,12 @@ const base: LiveAircraft = {
 
 describe("aircraftColor", () => {
   it("military is red, civil is grey", () => {
-    expect(aircraftColor({ ...base, isMilitary: true })).toEqual([230, 57, 70]);
-    expect(aircraftColor(base)).toEqual([150, 160, 170]);
+    // Przez stale, nie przez liczby: test ma pilnowac, ze wojskowy dostaje czerwony a cywilny
+    // szary, a nie zamrazac konkretny odcien. Wpisane na sztywno wartosci oblewaly sie przy
+    // przyciemnieniu szarego do progu kontrastu 3:1 - czyli przy poprawce, ktora mial przepuscic.
+    expect(aircraftColor({ ...base, isMilitary: true })).toEqual(RED);
+    expect(aircraftColor(base)).toEqual(GREY);
+    expect(aircraftColor(base)).not.toEqual(RED);
   });
 });
 

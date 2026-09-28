@@ -13,6 +13,13 @@ export function aircraftLayers(data: LiveAircraft[]): Layer[] {
       getFillColor: (a) => aircraftColor(a),
       getRadius: (a) => (a.isMilitary ? 6 : 3),
       radiusUnits: "pixels",
+      // Obwodka, bo samo wypelnienie nie wystarczy: czerwony wojskowy ma 2.46:1 wzgledem wody,
+      // czyli ponizej progu 3:1. Ciemny obrys ma 10.55:1 na wodzie i 16.03:1 na ladzie, wiec
+      // znacznik jest widoczny niezaleznie od tego, na czym wyladuje. Rozroznienie wojskowy/cywilny
+      // nie opiera sie na kolorze - promien jest dwa razy wiekszy, a maszyna ma podpis.
+      stroked: true,
+      getLineColor: LABEL,
+      lineWidthMinPixels: 1,
       pickable: true,
     }),
     new TextLayer<LiveAircraft>({
