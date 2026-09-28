@@ -5,6 +5,7 @@ import { AlertsPanel } from "./components/AlertsPanel";
 import { BALTIC_VIEW, MapView } from "./components/MapView";
 import { ReplayBar } from "./components/ReplayBar";
 import { SearchPanel } from "./components/SearchPanel";
+import { Warstwy } from "./components/Warstwy";
 import { SourcesFooter } from "./components/SourcesFooter";
 import { aircraftLayers } from "./layers/aircraft";
 import { alertsLayer } from "./layers/alerts";
@@ -12,6 +13,7 @@ import { jammingLayer } from "./layers/jamming";
 import { tripsLayer } from "./layers/trips";
 import { useLive } from "./live";
 import { replayBounds, toTrips, type Trip } from "./replay";
+import { stanDanych, WSZYSTKO_WIDOCZNE, type Widoczne } from "./warstwy";
 
 export default function App() {
   const { aircraft, alerts, setAlerts, connected } = useLive();
@@ -20,6 +22,7 @@ export default function App() {
   const [replay, setReplay] = useState<{ trips: Trip[]; start: number; max: number } | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [widoczne, setWidoczne] = useState<Widoczne>(WSZYSTKO_WIDOCZNE);
 
   useEffect(() => {
     getJSON<AlertDto[]>("/api/alerts").then(setAlerts).catch(() => undefined);
@@ -53,19 +56,39 @@ export default function App() {
     setPlaying(true);
   };
 
+  // Filtrujemy DANE, nie warstwy: warstwa bez danych nadal sie rysuje (i nadal lapie klikniecia),
+  // a pusta lista znika z mapy calkowicie. Dzieki temu wylaczenie w panelu znaczy to, co widac.
+  const widoczneSamoloty = aircraft.filter((a) =>
+    a.isMilitary ? widoczne.wojskowe : widoczne.cywilne);
+  const widoczneAlarmy = widoczne.alarmy ? alerts : [];
+  const widoczneZaklocenia = widoczne.zaklocenia ? jamming : [];
+
+  const liczby = {
+    wojskowe: aircraft.filter((a) => a.isMilitary && !a.onGround).length,
+    cywilne: aircraft.filter((a) => !a.isMilitary && !a.onGround).length,
+    alarmy: alerts.length,
+    zaklocenia: jamming.length,
+  };
+
   const layers = replay
-    ? [jammingLayer(jamming), tripsLayer(replay.trips, currentTime), alertsLayer(alerts)]
-    : [jammingLayer(jamming), ...aircraftLayers(aircraft), alertsLayer(alerts)];
+    ? [jammingLayer(widoczneZaklocenia), tripsLayer(replay.trips, currentTime), alertsLayer(widoczneAlarmy)]
+    : [jammingLayer(widoczneZaklocenia), ...aircraftLayers(widoczneSamoloty), alertsLayer(widoczneAlarmy)];
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
       <MapView layers={layers} viewState={view} onViewStateChange={setView} />
       <AlertsPanel alerts={alerts} onSelect={(a) => setView({ ...view, longitude: a.lon, latitude: a.lat, zoom: 8 })} />
       <SearchPanel />
-      <div className="status status-pod-szukaniem">{connected ? `na żywo · ${aircraft.length} samolotów` : "łączenie…"}</div>
-      <div className="legend">
-        GPS: <i className="amber" /> 2–10% zakłóconych <i className="red" /> ≥ 10%
-      </div>
+      <header className="naglowek">
+        <h1>WACHTA</h1>
+        <p>
+          Co widać z danych publicznych: ruch lotniczy i morski, zakłócenia GPS, oraz miejsca, które
+          własne detektory uznały za warte sprawdzenia. Każdy alarm jest <b>kandydatem do
+          sprawdzenia</b>, nigdy wyrokiem.
+        </p>
+        <p className="stan">{stanDanych(connected, liczby.wojskowe + liczby.cywilne, null)}</p>
+      </header>
+      <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
       <ReplayBar
         active={!!replay}
         onToggle={toggleReplay}

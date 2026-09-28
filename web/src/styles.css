@@ -204,3 +204,82 @@ body {
    tekst. Schodzi nad pasek odtwarzania, obok statusu: obie rzeczy sa stalymi objasnieniami mapy,
    wiec ich miejsce jest przy mapie, a nie w obszarze, ktory sluzy do zadawania pytan. */
 .legend { top: auto; bottom: 88px; right: 12px; }
+
+/* NAGLOWEK. Pierwsza rzecz, ktora ktos czyta, i jedyna szansa, zeby powiedziec, na co patrzy.
+   Bez tego aplikacja zaczyna sie od kropek na mapie - a pierwsza osoba, ktora ja otworzyla,
+   powiedziala doslownie "nie wiem o co chodzi, jakies kropki". */
+.naglowek {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 330px;
+  padding: 12px 14px;
+  background: #0d1117f0;
+  border-radius: 8px;
+}
+.naglowek h1 { margin: 0 0 6px; font-size: 17px; letter-spacing: 0.5px; }
+.naglowek p { margin: 0; font-size: 12px; line-height: 1.5; color: #c9d1d9; }
+.naglowek .stan { margin-top: 8px; color: #7ee2a8; font-size: 12px; }
+
+/* LEGENDA, KTORA JEST TEZ WYLACZNIKIEM. Osobna legenda to podpis obok obrazka i ludzie ja pomijaja;
+   legenda, ktora da sie kliknac, jest najszybszym sposobem na sprawdzenie, co znaczyl dany znak -
+   wylacz go i zobacz, co znikneło. */
+.warstwy {
+  position: absolute;
+  top: 152px;
+  left: 12px;
+  width: 330px;
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
+  padding: 10px 14px 12px;
+  background: #0d1117e6;
+  border-radius: 8px;
+}
+.warstwy h2 { margin: 0 0 8px; font-size: 13px; color: #8b949e; font-weight: 600; }
+.warstwy ul { list-style: none; margin: 0; padding: 0; }
+.warstwy li { margin-bottom: 9px; }
+
+.warstwy li > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.warstwy li > button:hover { background: #161b22; }
+.warstwy li > button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+
+/* Wylaczona warstwa ma byc widocznie wylaczona, ale dalej czytelna - to nadal jest legenda. */
+.warstwy .wylaczona { opacity: 0.42; }
+.warstwy .wylaczona .znak { background: none !important; }
+
+.warstwy .nazwa { flex: 1; font-size: 13px; }
+.warstwy .liczba { color: #8b949e; font-size: 12px; font-variant-numeric: tabular-nums; }
+.warstwy .opis { margin: 2px 0 0 34px; font-size: 11px; line-height: 1.45; color: #8b949e; }
+
+/* Znak w legendzie ma wygladac jak znak na mapie, a nie jak kwadracik obok napisu. */
+.znak { display: inline-block; width: 12px; height: 12px; border: 2px solid transparent; flex: none; }
+.znak.kropka { border-radius: 50%; }
+.znak.obwodka { border-radius: 50%; background: none !important; }
+.znak.heksagon { border-radius: 2px; transform: rotate(45deg); }
+
+.warstwy .ostrzezenie {
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-left: 3px solid #d29922;
+  background: #1c1710;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #e3b341;
+}
+
+/* Panel alarmow schodzi pod legende. Kolejnosc od gory jest kolejnoscia czytania: czym to jest,
+   co na tym widac, co system znalazl. */
+.panel { top: auto; bottom: 56px; max-height: 38vh; }
