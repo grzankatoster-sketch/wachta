@@ -160,3 +160,94 @@ def test_speed_is_worked_out_from_positions_when_the_field_is_missing():
     found = offshore(find_encounters(silent("111", 55.0) + silent("222", 55.0027)))
     assert len(found) == 1
     assert found[0].both_under_way
+
+
+def test_ship_without_a_speed_field_is_judged_by_its_positions():
+    # Znalezione w audycie: brak pola SOG znaczyl "wolno", wiec statek pedzacy 21 wezlow przez
+    # ciesnine liczyl sie jako stojacy przez ponad godzine - i mogl utworzyc falszywa pare.
+    from wachta_detectors.sts import stationary_periods
+    pedzi = [ShipFix("219000222", T0 + timedelta(minutes=m), 55.0 + m * 0.006, 13.0, None)
+             for m in range(80)]
+    assert stationary_periods(pedzi) == []
+
+
+def test_missing_speed_but_actually_stopped_still_counts():
+    stoi = [ShipFix("219000222", T0 + timedelta(minutes=m), 55.0, 13.0, None) for m in range(80)]
+    approach = [ShipFix("219000222", T0 + timedelta(minutes=-20 + i), 55.0 - (20 - i) * 0.004, 13.0, 8.0)
+                for i in range(20)]
+    from wachta_detectors.sts import stationary_periods
+    assert len(stationary_periods(approach + stoi)) == 1
+
+
+def test_pair_is_found_at_high_latitude_where_a_degree_of_longitude_is_short():
+    # Znalezione w audycie: zasieg siatki byl staly, wiec na 75 stopniu szerokosci para odlegla
+    # o 0,63 km znikala mimo limitu 0,8 km - stopien dlugosci ma tam juz tylko 28,7 km.
+    lat = 75.0
+    lon_step = 0.63 / (111.0 * __import__("math").cos(__import__("math").radians(lat)))
+    fixes = alongside("219000111", 60, lat, 20.0) + alongside("219000222", 60, lat, 20.0 + lon_step)
+    found = offshore(find_encounters(fixes))
+    assert len(found) == 1
+    assert 0.5 < found[0].min_separation_km < 0.8
+
+
+class TestPostojeNaPelnymTorze:
+    """Znalezione w audycie: odcinki postoju budowano z PRZEFILTROWANEGO toru.
+
+    Szybkie pozycje odrzucano przed segmentacja, wiec dowod, ze statek odplynal, znikal razem z
+    nimi. Dwa postoje rozdzielone potwierdzonym tranzytem wracaly jako jeden dlugi postoj o srodku
+    w punkcie, w ktorym statek nigdy nie stal - a to wlasnie te postoje karmia D5 dark STS.
+    """
+
+    @staticmethod
+    def postoj(mmsi, od, ile, lat, lon):
+        return [fix(mmsi, od + 5 * i, lat, lon, 0.2) for i in range(ile)]
+
+    def dwa_postoje_z_tranzytem(self):
+        # 40 minut w miejscu, 6 km tranzytu z pelna predkoscia, 40 minut w nowym miejscu
+        tranzyt = [fix("111111111", 40 + 5 * i, 55.0 + 0.027 * i, 18.0, 12.0) for i in (1, 2)]
+        return self.postoj("111111111", 0, 9, 55.0, 18.0) + tranzyt + self.postoj("111111111", 52, 9, 55.054, 18.0)
+
+    def test_confirmed_movement_ends_a_stop(self):
+        from wachta_detectors.sts import stationary_periods
+
+        postoje = stationary_periods(self.dwa_postoje_z_tranzytem())
+        assert len(postoje) == 2, "tranzyt miedzy postojami to koniec postoju, nie jego srodek"
+        assert [p.duration for p in postoje] == [timedelta(minutes=40), timedelta(minutes=40)]
+
+    def test_the_centre_is_a_place_the_ship_actually_sat_at(self):
+        from wachta_detectors.sts import stationary_periods
+
+        for p in stationary_periods(self.dwa_postoje_z_tranzytem()):
+            assert p.lat in (55.0, 55.054), p.lat
+
+    def test_a_stop_that_wanders_too_far_is_not_one_stop(self):
+        from wachta_detectors.sts import stationary_periods
+
+        # Wolne raporty bez ani jednej szybkiej pozycji, ale przesuniete lacznie o 12 km: sam czas
+        # tego nie rozdzieli, bo zadna przerwa nie przekracza max_gap. Rozdzielic musi odleglosc.
+        wleczenie = [fix("222222222", 5 * i, 55.0 + 0.0075 * i, 18.0, 0.4) for i in range(16)]
+        dlugi = stationary_periods(wleczenie, StsRules(max_spread_km=100.0))
+        assert len(dlugi) == 1 and dlugi[0].duration == timedelta(minutes=75)   # bez limitu: jeden
+
+        postoje = stationary_periods(wleczenie)
+        assert len(postoje) < 2 or all(p.duration < timedelta(minutes=75) for p in postoje)
+        assert not any(p.duration == timedelta(minutes=75) for p in postoje), \
+            "12 km przemieszczenia nie jest jednym postojem"
+
+    def test_movement_ends_a_stop_even_when_the_ship_barely_moved(self):
+        from wachta_detectors.sts import stationary_periods
+
+        # Krotki skok o 1,85 km: za blisko, zeby rozdzielil go limit przemieszczenia, i za szybko,
+        # zeby rozdzielila go przerwa w raportach. Zostaje jedyny prawdziwy powod - statek plynal.
+        skok = [fix("444444444", 40 + 5 * i, 55.0 + 0.00833 * i, 18.0, 8.0) for i in (1, 2)]
+        tor = self.postoj("444444444", 0, 9, 55.0, 18.0) + skok + self.postoj("444444444", 52, 9, 55.0166, 18.0)
+
+        postoje = stationary_periods(tor)
+        assert len(postoje) == 2
+        assert [p.duration for p in postoje] == [timedelta(minutes=40), timedelta(minutes=40)]
+
+    def test_an_undisturbed_stop_is_still_one_stop(self):
+        from wachta_detectors.sts import stationary_periods
+
+        [p] = stationary_periods(self.postoj("333333333", 0, 20, 55.0, 18.0))
+        assert p.duration == timedelta(minutes=95)

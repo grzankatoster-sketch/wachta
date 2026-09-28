@@ -20,9 +20,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .anchor import ShipFix
+from .anchor import ShipFix, by_ship
 from .geo import haversine_km
+from .geo import implied_kt as _implied_kt
 
+SAME_INSTANT_KM = 1.0     # ponizej tego dwie pozycje w tej samej sekundzie to zaokraglenie zegara
 MAX_HULL_KT = 40.0          # szybciej nie plynie nic, co wozi ladunek; kutry i wodoloty tez nie
 
 # Nie kazdy numer MMSI nalezy do statku. Standard ITU rezerwuje calE prefiksy na co innego, a
@@ -86,10 +88,14 @@ class IdentityReport:
 
 
 def implied_kt(a: ShipFix, b: ShipFix) -> float:
-    hours = (b.ts - a.ts).total_seconds() / 3600
-    if hours <= 0:
-        return 0.0
-    return haversine_km(a.lat, a.lon, b.lat, b.lon) / 1.852 / hours
+    """Speed two fixes imply. Two distant fixes stamped the same second imply an infinite one.
+
+    Returning 0 there - as the first version did, to dodge the division - threw away the strongest
+    evidence the data can hold. A hull can be fast; it cannot be in two places in the same second.
+    """
+    return _implied_kt(haversine_km(a.lat, a.lon, b.lat, b.lon),
+                       (b.ts - a.ts).total_seconds() / 3600,
+                       same_instant_km=SAME_INSTANT_KM)
 
 
 def find_jumps(track: Sequence[ShipFix], rules: IdentityRules = IdentityRules()) -> list[Jump]:
@@ -158,15 +164,6 @@ def examine(track: Sequence[ShipFix], rules: IdentityRules = IdentityRules()) ->
     else:
         report.verdict = "bledny punkt"
     return report
-
-
-def by_ship(fixes: Iterable[ShipFix]) -> dict[str, list[ShipFix]]:
-    tracks: dict[str, list[ShipFix]] = {}
-    for fix in fixes:
-        tracks.setdefault(fix.mmsi, []).append(fix)
-    for track in tracks.values():
-        track.sort(key=lambda f: f.ts)
-    return tracks
 
 
 def scan(fixes: Iterable[ShipFix], rules: IdentityRules = IdentityRules()) -> list[IdentityReport]:

@@ -11,43 +11,80 @@ What this does NOT do, on purpose:
   * it does not treat tone as truth. Tone is a property of the text, not of the world;
   * a side with one article is not "a side". Comparisons need a minimum number of articles.
 """
-from collections.abc import Iterable, Iterator
+import json
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from statistics import mean
 
-# Which side of the telling an outlet belongs to. Deliberately narrow: the point is to compare how
-# THIS conflict is told, not to classify the world's press. An outlet we have not assigned returns
-# None and is counted in no side at all - better a missing voice than a wrongly labelled one.
-OUTLET_SIDES = {
-    # rosyjskie panstwowe i prorzadowe
-    "rt.com": "RU", "tass.com": "RU", "tass.ru": "RU", "ria.ru": "RU", "sputnikglobe.com": "RU",
-    "sputniknews.com": "RU", "iz.ru": "RU", "kp.ru": "RU", "gazeta.ru": "RU", "lenta.ru": "RU",
-    "rg.ru": "RU", "vedomosti.ru": "RU", "kommersant.ru": "RU", "interfax.ru": "RU", "tvzvezda.ru": "RU",
-    # rosyjskie niezalezne i na emigracji - osobna strona, bo to inna perspektywa niz panstwowa
-    "meduza.io": "RU-niezalezne", "themoscowtimes.com": "RU-niezalezne", "novayagazeta.eu": "RU-niezalezne",
-    "istories.media": "RU-niezalezne", "agents.media": "RU-niezalezne",
-    # ukrainskie
-    "kyivpost.com": "UA", "unian.info": "UA", "unian.ua": "UA", "ukrinform.net": "UA",
-    "ukrinform.ua": "UA", "pravda.com.ua": "UA", "kyivindependent.com": "UA", "epravda.com.ua": "UA",
-    "censor.net": "UA", "liga.net": "UA", "suspilne.media": "UA", "rbc.ua": "UA", "nv.ua": "UA",
-    # bialoruskie
-    "belta.by": "BY", "sb.by": "BY", "nashaniva.com": "BY-niezalezne", "zerkalo.io": "BY-niezalezne",
-    # polskie
-    "notesfrompoland.com": "PL", "tvpworld.com": "PL", "pap.pl": "PL", "onet.pl": "PL",
-    "wyborcza.pl": "PL", "rp.pl": "PL", "tvn24.pl": "PL", "polskieradio.pl": "PL", "wnp.pl": "PL",
-    # zachodnie
-    "bbc.com": "ZACHOD", "bbc.co.uk": "ZACHOD", "theguardian.com": "ZACHOD", "reuters.com": "ZACHOD",
-    "apnews.com": "ZACHOD", "cnn.com": "ZACHOD", "nytimes.com": "ZACHOD", "washingtonpost.com": "ZACHOD",
-    "ft.com": "ZACHOD", "politico.eu": "ZACHOD", "dw.com": "ZACHOD", "spiegel.de": "ZACHOD",
-    "lemonde.fr": "ZACHOD", "euronews.com": "ZACHOD", "telegraph.co.uk": "ZACHOD", "nbcnews.com": "ZACHOD",
-    "abcnews.go.com": "ZACHOD", "cbsnews.com": "ZACHOD", "foxnews.com": "ZACHOD", "newsweek.com": "ZACHOD",
-}
+# Kto po ktorej stronie - i czy domena krajowa sama wystarczy - to decyzja ANALITYCZNA, nie
+# techniczna. Dlatego mieszka w wersjonowanym pliku danych, nie w kodzie: zmiane przypisania widac
+# w historii repozytorium jako zmiane polityki, a nie jako poprawke w module.
+POLICY_PATH = Path(__file__).resolve().parents[3] / "data" / "analysis" / "outlet_sides.json"
 
-# Country domains that map onto a side on their own.
-TLD_SIDES = {"ru": "RU", "ua": "UA", "by": "BY", "pl": "PL", "de": "ZACHOD", "fr": "ZACHOD",
-             "uk": "ZACHOD", "it": "ZACHOD", "es": "ZACHOD", "nl": "ZACHOD", "se": "ZACHOD",
-             "no": "ZACHOD", "dk": "ZACHOD", "fi": "ZACHOD", "lt": "ZACHOD", "lv": "ZACHOD",
-             "ee": "ZACHOD", "cz": "ZACHOD", "sk": "ZACHOD"}
+
+@dataclass(frozen=True)
+class SidePolicy:
+    """Which outlet speaks for which side, and whether a country domain may stand in for that.
+
+    Deliberately narrow: the point is to compare how THIS conflict is told, not to classify the
+    world's press. An outlet nobody assigned belongs to no side at all - better a missing voice than
+    a wrongly labelled one.
+
+    tld_fallback is kept apart from the assignments because it is a different claim. An assignment
+    says "we read this outlet and placed it"; the fallback says "a country domain is enough". With
+    the fallback on, the promise above does not hold: any blog under .ru joins the RU side and drags
+    its mean tone. Which is why it is a switch in the configuration, off by default, and not a line
+    of code.
+    """
+    outlets: Mapping[str, str]
+    tld_sides: Mapping[str, str]
+    tld_fallback: bool
+    version: str = ""
+
+    def side(self, source: str) -> str | None:
+        """Side of the telling for one outlet domain, or None when it is not assigned."""
+        assigned, _ = self.side_with_origin(source)
+        return assigned
+
+    def side_with_origin(self, source: str) -> tuple[str | None, str]:
+        """The side, and whether it was NAMED in the list or GUESSED from the country domain.
+
+        The difference matters enough to travel with the value. A named outlet is an editorial
+        decision somebody made and can be argued with; a side taken from the top level domain is an
+        assumption that everything published under `.lv` speaks with one voice, which is false for
+        any country with a Russian-language press - and which would give a bicycle shop a position
+        on the war. Measured on three hours of GDELT: without the fallback the layer finds 4 events
+        with two sides, with it 18. Dropping three quarters of the output is too high a price for
+        purity, so the guess stays and is labelled instead.
+        """
+        domain = source.lower().strip()
+        if domain in self.outlets:
+            return self.outlets[domain], "lista"
+        parts = domain.split(".")
+        if len(parts) >= 2 and ".".join(parts[-2:]) in self.outlets:
+            return self.outlets[".".join(parts[-2:])], "lista"
+        if not self.tld_fallback:
+            return None, "brak"
+        guessed = self.tld_sides.get(parts[-1] if parts else "")
+        return guessed, ("domena" if guessed else "brak")
+
+    @classmethod
+    def from_file(cls, path: Path) -> "SidePolicy":
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        return cls(
+            outlets={k.lower(): v for k, v in raw["outlets"].items()},
+            tld_sides={k.lower(): v for k, v in raw.get("tld_sides", {}).items()},
+            tld_fallback=bool(raw.get("tld_fallback", False)),
+            version=str(raw.get("wersja", "")),
+        )
+
+
+@lru_cache(maxsize=None)
+def load_policy(path: Path | str | None = None) -> SidePolicy:
+    return SidePolicy.from_file(Path(path) if path else POLICY_PATH)
+
 
 COL = {
     "event_id": 0, "event_time": 1, "mention_time": 2, "type": 3, "source": 4, "url": 5,
@@ -66,15 +103,8 @@ class Mention:
 
     @property
     def side(self) -> str | None:
-        """Side of the telling, or None when we have not assigned this outlet to any."""
-        domain = self.source.lower().strip()
-        if domain in OUTLET_SIDES:
-            return OUTLET_SIDES[domain]
-        parts = domain.split(".")
-        if len(parts) >= 2 and ".".join(parts[-2:]) in OUTLET_SIDES:
-            return OUTLET_SIDES[".".join(parts[-2:])]
-        tld = parts[-1] if parts else ""
-        return TLD_SIDES.get(tld)
+        """Side of the telling under the configured policy, or None when the outlet is unassigned."""
+        return load_policy().side(self.source)
 
 
 @dataclass(frozen=True)
@@ -84,6 +114,12 @@ class SideView:
     mean_tone: float
     languages: tuple[str, ...]
     examples: tuple[str, ...] = field(default=())
+    from_tld: int = 0            # ile z tych artykulow dostalo strone z domeny, a nie z listy
+
+    @property
+    def only_guessed(self) -> bool:
+        """True when nothing on this side was a named outlet - the whole voice is an assumption."""
+        return self.articles > 0 and self.from_tld == self.articles
 
 
 @dataclass(frozen=True)
@@ -97,8 +133,13 @@ class Versions:
 
     @property
     def is_weak(self) -> bool:
-        """True when some side speaks with a single article - a comparison, but a thin one."""
-        return any(s.articles < 2 for s in self.sides)
+        """True when the comparison rests on thin ground: one article, or only guessed outlets.
+
+        Both cases look identical in the output - two sides, two numbers, a tone gap - and both
+        deserve the same warning. A side built entirely from country-domain guesses is not a side
+        that anyone edited; it is a bucket.
+        """
+        return any(s.articles < 2 or s.only_guessed for s in self.sides)
 
     @property
     def tone_gap(self) -> float:
@@ -138,24 +179,37 @@ def parse_mentions(rows: Iterable[str]) -> Iterator[Mention]:
         )
 
 
-def compare_sides(mentions: Iterable[Mention], min_articles: int = 1) -> Versions | None:
+def compare_sides(mentions: Iterable[Mention], min_articles: int = 1,
+                  policy: SidePolicy | None = None) -> Versions | None:
     """Groups one event's mentions by side. Sides below `min_articles` are dropped, not averaged in.
 
     The default of one article is deliberate: measured on four hours of GDELT, requiring two articles
     per side left three comparable events in the whole world, while one article left twenty-two. A
     thin comparison flagged as thin (see `is_weak`) beats no comparison at all.
     """
+    polityka = policy or load_policy()
     by_side: dict[str, list[Mention]] = {}
     event_id = None
+    zgadniete: set[str] = set()          # adresy, ktorych strona wzieła sie z domeny, nie z listy
     for m in mentions:
         event_id = event_id or m.event_id
-        side = m.side
+        side, skad = polityka.side_with_origin(m.source)
         if m.tone is None or side is None:   # nieprzypisana redakcja nie jest zadna strona
             continue
+        if skad == "domena":
+            zgadniete.add(m.url)
         by_side.setdefault(side, []).append(m)
 
     sides = []
     for side, group in by_side.items():
+        # Jeden artykul to jeden glos. GDELT wystawia wiersz na kazda WZMIANKE, wiec ten sam tekst
+        # potrafi wrocic kilka razy - a wtedy podwaja swoj wplyw na srednia, przepycha strone przez
+        # min_articles i kasuje ostrzezenie o cienkiej podstawie. Zostaje wzmianka najpewniejsza.
+        najlepsze: dict[str, Mention] = {}
+        for m in sorted(group, key=lambda x: -x.confidence):
+            najlepsze.setdefault(m.url, m)
+        group = list(najlepsze.values())
+
         if len(group) < min_articles:
             continue
         sides.append(SideView(
@@ -164,6 +218,7 @@ def compare_sides(mentions: Iterable[Mention], min_articles: int = 1) -> Version
             mean_tone=round(mean(m.tone for m in group), 2),
             languages=tuple(sorted({m.language for m in group if m.language})),
             examples=tuple(m.url for m in sorted(group, key=lambda x: -x.confidence)[:2]),
+            from_tld=sum(1 for m in group if m.url in zgadniete),
         ))
 
     if not sides or event_id is None:

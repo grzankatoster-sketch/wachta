@@ -131,6 +131,21 @@ def in_box(events: Iterable[Event], lat_min: float, lat_max: float, lon_min: flo
     return [e for e in events if lat_min <= e.lat <= lat_max and lon_min <= e.lon <= lon_max]
 
 
+def cluster_key(event: Event, round_to: int = 2) -> tuple:
+    """Identity of one happening: day, exact action, rounded position, and both actors as named.
+
+    Actor name and country, not country alone: UKRGOV and UKRMIL both carry the code UKR, so a
+    country-level key merges a government statement with a military action reported from the same
+    town on the same day. event_code, not root_code, for the same reason - 190 (use of force) and
+    195 (air strike) both sit under root 19. Merging those is not deduplication, it is losing an
+    event, and the merged row then keeps the wrong actor and the wrong action.
+    """
+    return (event.day, event.event_code or event.root_code,
+            round(event.lat, round_to), round(event.lon, round_to),
+            event.actor1 or "", event.actor2 or "",
+            event.actor1_country or "", event.actor2_country or "")
+
+
 def cluster_events(events: Iterable[Event], round_to: int = 2) -> list[list[Event]]:
     """The same happening arrives as many rows. Cluster by day, action, rounded position and actors.
 
@@ -140,9 +155,7 @@ def cluster_events(events: Iterable[Event], round_to: int = 2) -> list[list[Even
     """
     buckets: dict[tuple, list[Event]] = {}
     for e in events:
-        key = (e.day, e.root_code, round(e.lat, round_to), round(e.lon, round_to),
-               (e.actor1_country or e.actor1 or ""), (e.actor2_country or e.actor2 or ""))
-        buckets.setdefault(key, []).append(e)
+        buckets.setdefault(cluster_key(e, round_to), []).append(e)
     return sorted(buckets.values(), key=lambda group: -len(group))
 
 

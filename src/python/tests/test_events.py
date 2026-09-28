@@ -123,3 +123,24 @@ class TestClustering:
         clusters = cluster_events(parse_rows(rows))
         assert len(clusters[0]) == 4
         assert len(clusters[1]) == 1
+
+    def test_different_actors_from_one_country_are_not_merged(self):
+        """UKRGOV i UKRMIL maja ten sam kod kraju UKR - to nie jest ten sam aktor."""
+        from wachta_detectors.events import cluster_events
+
+        rows = [row({0: "1", 6: "UKRGOV", 7: "UKR"}), row({0: "2", 6: "UKRMIL", 7: "UKR"})]
+        assert [len(c) for c in cluster_events(parse_rows(rows))] == [1, 1]
+
+    def test_different_detailed_actions_under_one_root_are_not_merged(self):
+        """190 (uzycie sily) i 195 (nalot) leza pod wspolnym rootem 19, ale to inne dzialania."""
+        from wachta_detectors.events import cluster_events
+
+        rows = [row({0: "1", 26: "190"}), row({0: "2", 26: "195"})]
+        assert [len(c) for c in cluster_events(parse_rows(rows))] == [1, 1]
+
+    def test_one_happening_in_two_articles_is_still_one_cluster(self):
+        """Straznik przeciwnej pomylki: ostrzejszy klucz nie moze rozbic prawdziwych powtorzen."""
+        from wachta_detectors.events import cluster_events
+
+        rows = [row({0: "1", 60: "https://a"}), row({0: "2", 60: "https://b"})]
+        assert [len(c) for c in cluster_events(parse_rows(rows))] == [2]

@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 import h3
 
 from wachta_detectors.coverage import COVERAGE_RESOLUTION
-from wachta_detectors.dark import DarkRules, LastSeen, find_dark_candidates
+from wachta_detectors.dark import (DarkRules, LastSeen, find_dark_candidates, rules_config,
+                                   rules_version, snapshot_inputs)
 
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
 LAT, LON = 55.5, 17.5  # open sea, south Baltic
@@ -73,3 +74,38 @@ def test_short_track_is_ignored():
 def test_rules_are_configurable():
     assert run([seen(alt_ft=2000)]) == []
     assert find_dark_candidates([seen(alt_ft=2000)], GOOD_COVERAGE, ALIVE, FAR_AIRPORTS, NOW, DarkRules(min_alt_ft=1000))
+
+
+class TestFrozenInputs:
+    """A sample is only worth keeping if it reproduces the verdict it was taken from."""
+
+    # Lotnisko 40.0013 km od samolotu - tuz za progiem airport_radius_km. Zaokraglenie pozycji do
+    # czterech miejsc po przecinku to ok. 5 m i przesuwa je na 39.9968 km, czyli na druga strone progu.
+    AIRPORT_JUST_OUTSIDE = (55.85974, LON)
+
+    def test_replay_from_the_sample_repeats_the_live_verdict_at_the_threshold(self):
+        s = seen()
+        live = find_dark_candidates([s], GOOD_COVERAGE, ALIVE, [self.AIRPORT_JUST_OUTSIDE], NOW)
+        frozen = snapshot_inputs(s, GOOD_COVERAGE, ALIVE, [self.AIRPORT_JUST_OUTSIDE], NOW)
+        replay = find_dark_candidates([s], frozen["coverage"], set(frozen["alive"]),
+                                      [tuple(a) for a in frozen["airports"]],
+                                      datetime.fromisoformat(frozen["now"]))
+        assert len(live) == 1
+        assert len(replay) == len(live)
+
+    def test_sample_records_the_thresholds_that_produced_the_verdict(self):
+        frozen = snapshot_inputs(seen(), GOOD_COVERAGE, ALIVE, FAR_AIRPORTS, NOW)
+        assert frozen["rules"] == rules_config()
+        assert frozen["rules"]["airport_radius_km"] == 40.0
+        assert frozen["rules"]["min_gap"] == 300.0
+        assert frozen["rules_version"] == rules_version()
+
+    def test_sample_records_the_rules_it_was_given_not_the_defaults(self):
+        strict = DarkRules(airport_radius_km=25.0)
+        frozen = snapshot_inputs(seen(), GOOD_COVERAGE, ALIVE, FAR_AIRPORTS, NOW, strict)
+        assert frozen["rules"]["airport_radius_km"] == 25.0
+        assert frozen["rules_version"] == rules_version(strict)
+
+    def test_a_moved_threshold_moves_the_version(self):
+        assert rules_version(DarkRules(airport_radius_km=25.0)) != rules_version()
+        assert rules_version(DarkRules(min_gap=timedelta(minutes=6))) != rules_version()

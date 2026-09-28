@@ -19,8 +19,9 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from .anchor import ShipFix
-from .geo import haversine_km
+from .anchor import ShipFix, by_ship
+from .geo import cell_of as _cell
+from .geo import haversine_km, implied_kt
 
 
 @dataclass(frozen=True)
@@ -63,24 +64,11 @@ class GapAlert:
         return self.resumed_at - self.vanished_at
 
 
-def _cell(lat: float, lon: float, size: float) -> tuple[int, int]:
-    return int(lat // size), int(lon // size)
-
-
 def _buckets(start: datetime, end: datetime, step: timedelta) -> list[int]:
     """Whole time buckets strictly inside the gap - the moments the ship should have been heard."""
     first = int(start.timestamp() // step.total_seconds()) + 1
     last = int(end.timestamp() // step.total_seconds())
     return list(range(first, last))
-
-
-def by_ship(fixes: Iterable[ShipFix]) -> dict[str, list[ShipFix]]:
-    tracks: dict[str, list[ShipFix]] = {}
-    for fix in fixes:
-        tracks.setdefault(fix.mmsi, []).append(fix)
-    for track in tracks.values():
-        track.sort(key=lambda f: f.ts)
-    return tracks
 
 
 def _heard(fixes: Iterable[ShipFix], rules: GapRules) -> dict[tuple[int, int, int], set[str]]:
@@ -99,25 +87,30 @@ def find_gaps(fixes: Sequence[ShipFix], rules: GapRules = GapRules()) -> list[Ga
     tracks = by_ship(fixes)
     heard = _heard(fixes, rules)
 
-    # Najpierw wszystkie zaniki, potem dopiero werdykt: zeby stwierdzic awarie stacji, trzeba wiedziec,
-    # czy w tej samej kratce i tej samej chwili zamilkl ktos jeszcze.
+    # Awaria stacji to zdarzenie infrastruktury, wiec liczy sie z WSZYSTKICH torow. Pierwsza wersja
+    # budowala ten licznik dopiero z kandydatow, czyli po odrzuceniu statkow stojacych i tych, ktore
+    # wrocily w to samo miejsce - a wlasnie takie jednostki zwykle wypelniaja kotwicowisko pod
+    # stacja. Padajaca stacja cichla wtedy "tylko jednemu" statkowi i jego luka dostawala etykiete
+    # dzialajacego odbioru.
+    silenced: dict[tuple[int, int, int], set[str]] = {}
+    step = rules.bucket.total_seconds()
     raw: list[tuple[ShipFix, ShipFix]] = []
+
     for track in tracks.values():
         for before, after in zip(track, track[1:]):
             span = after.ts - before.ts
             if not (rules.min_gap <= span <= rules.max_gap):
                 continue
+
+            row, col = _cell(before.lat, before.lon, rules.cell_deg)
+            key = (row, col, int(before.ts.timestamp() // step))
+            silenced.setdefault(key, set()).add(before.mmsi)
+
             if before.sog is not None and before.sog < rules.min_sog_before:
                 continue
             if haversine_km(before.lat, before.lon, after.lat, after.lon) < rules.min_shift_km:
                 continue
             raw.append((before, after))
-
-    silenced: dict[tuple[int, int, int], set[str]] = {}
-    step = rules.bucket.total_seconds()
-    for before, _ in raw:
-        row, col = _cell(before.lat, before.lon, rules.cell_deg)
-        silenced.setdefault((row, col, int(before.ts.timestamp() // step)), set()).add(before.mmsi)
 
     alerts: list[GapAlert] = []
     for before, after in raw:
@@ -133,7 +126,7 @@ def find_gaps(fixes: Sequence[ShipFix], rules: GapRules = GapRules()) -> list[Ga
         hours = (after.ts - before.ts).total_seconds() / 3600
         km = haversine_km(before.lat, before.lon, after.lat, after.lon)
 
-        implied = km / 1.852 / hours if hours else 0.0
+        implied = implied_kt(km, hours)
         if implied > rules.max_implied_kt:
             motion = "predkosc niemozliwa - dane do sprawdzenia"
         elif implied < rules.min_implied_kt:

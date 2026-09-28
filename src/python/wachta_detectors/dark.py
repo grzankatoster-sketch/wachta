@@ -1,4 +1,6 @@
 """D1: aircraft that stop transmitting mid-air inside good receiver coverage. Output = 'to check', never a verdict."""
+import hashlib
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
@@ -45,6 +47,21 @@ class DarkRules:
     min_cell_reports: int = 200
 
 
+def rules_config(rules: DarkRules = DarkRules()) -> dict:
+    """Thresholds as plain JSON, so a frozen case says which rules produced its verdict."""
+    return {k: (v.total_seconds() if isinstance(v, timedelta) else v) for k, v in asdict(rules).items()}
+
+
+def rules_version(rules: DarkRules = DarkRules()) -> str:
+    """Short digest of the thresholds.
+
+    Derived from the values, never hand-maintained: a version that has to be bumped by hand is the
+    one that silently stays behind a changed threshold, and then old and new samples get averaged
+    into one metric.
+    """
+    return hashlib.sha256(json.dumps(rules_config(rules), sort_keys=True).encode()).hexdigest()[:12]
+
+
 def snapshot_inputs(
     s: LastSeen,
     coverage: Mapping[str, int],
@@ -61,8 +78,13 @@ def snapshot_inputs(
         "now": now.isoformat(),
         "coverage": {c: coverage.get(c, 0) for c in disk},
         "alive": sorted(alive_cells & set(disk)),
-        "airports": [[round(a_lat, 4), round(a_lon, 4)] for a_lat, a_lon in airports
+        # Pelna precyzja, bo decyzja jej uzywa: zaokraglenie do 4 miejsc to ok. 5 m, a to wystarczy,
+        # zeby odtworzenie przy granicy airport_radius_km dalo inny wynik niz ocena na zywo.
+        "airports": [[a_lat, a_lon] for a_lat, a_lon in airports
                      if nearest_airport_km([(a_lat, a_lon)], s.lat, s.lon) <= rules.airport_radius_km * 3],
+        # Bez progow probka mowi tylko "co widzielismy", nie "dlaczego tak zdecydowalismy".
+        "rules": rules_config(rules),
+        "rules_version": rules_version(rules),
     }
 
 

@@ -11,9 +11,10 @@ fighting, but it can equally mean one press conference that many outlets picked 
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from math import exp, floor, lgamma, log
+from math import exp, lgamma, log
 
 from wachta_detectors.events import Event
+from wachta_detectors.geo import cell_of as _cell
 
 DEFAULT_CELL_DEG = 0.5
 
@@ -48,10 +49,6 @@ def poisson_tail(k: int, lam: float) -> float:
     return max(0.0, min(1.0, 1.0 - head))
 
 
-def _cell(lat: float, lon: float, size: float) -> tuple[int, int]:
-    return (floor(lat / size), floor(lon / size))
-
-
 def detect_spikes(
     events: Iterable[Event],
     now: datetime,
@@ -78,6 +75,11 @@ def detect_spikes(
             continue
         stamp = e.added or datetime.combine(e.day, time(12, 0), tzinfo=now.tzinfo)
         key = _cell(e.lat, e.lon, cell_deg)
+        # Okno ma gorna granice. Bez niej zdarzenie ze znacznikiem z przyszlosci - zegar zrodla,
+        # blad parsowania albo zastepcze poludnie dla dzisiejszej daty - wpada do biezacego okna i
+        # potrafi samo wywolac alarm. Sprawdzone: osiem takich zdarzen wystarczylo.
+        if stamp > now:
+            continue
         if stamp >= window_start:
             recent.setdefault(key, []).append(e)
         elif stamp >= baseline_start:

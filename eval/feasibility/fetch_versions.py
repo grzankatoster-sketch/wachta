@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src" / "python"))
 
 from wachta_detectors.events import cluster_events, in_box, parse_rows  # noqa: E402
-from wachta_detectors.versions import compare_sides, group_by_event, parse_mentions  # noqa: E402
+from wachta_detectors.versions import compare_sides, group_by_event, load_policy, parse_mentions  # noqa: E402
 
 OUT = ROOT / "eval" / "fixtures" / "versions_snapshot.json"
 BASE = "http://data.gdeltproject.org/gdeltv2/"
@@ -102,6 +102,10 @@ def main() -> int:
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "hours": hours,
         "source": "GDELT 2.0 export + mentions",
+        # Bez tego snapshot nie da sie odtworzyc: ten sam material pod inna polityka przypisan daje
+        # inne strony, inne srednie i inna liczbe wydarzen z dwiema wersjami.
+        "policy_version": load_policy().version,
+        "policy_tld_fallback": load_policy().tld_fallback,
         "note": ("Roznica wydzwieku pokazuje, ze relacje sie roznia - nie kto ma racje. "
                  "Ton to cecha tekstu, nie swiata."),
         "events": [{

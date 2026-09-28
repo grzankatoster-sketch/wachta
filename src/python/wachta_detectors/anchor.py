@@ -11,8 +11,9 @@ traffic, a pilot boarding, engine trouble. The detector says "look here", never 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from math import atan2, cos, degrees, log, radians, sin, sqrt
+from math import cos, degrees, log, radians, sin, sqrt
 
+from wachta_detectors.geo import bearing_deg
 from wachta_detectors.infrastructure import Line
 from wachta_detectors.spatial_index import LineIndex
 
@@ -28,6 +29,21 @@ class ShipFix:
     name: str | None = None
 
 
+def by_ship(fixes: Iterable[ShipFix]) -> dict[str, list[ShipFix]]:
+    """Positions grouped into per-MMSI tracks, each sorted in time.
+
+    Here, next to ShipFix, because every detector that reads tracks needs exactly this and three of
+    them used to carry their own copy. The third copy was the dangerous one: it filtered the fixes
+    before grouping, so a stop and the confirmed movement after it ended up in one segment.
+    """
+    tracks: dict[str, list[ShipFix]] = {}
+    for fix in fixes:
+        tracks.setdefault(fix.mmsi, []).append(fix)
+    for track in tracks.values():
+        track.sort(key=lambda f: f.ts)
+    return tracks
+
+
 @dataclass(frozen=True)
 class AnchorRules:
     buffer_km: float = 2.0            # dokladnosc tras kabli z OSM nie uzasadnia wezszego bufora
@@ -36,6 +52,9 @@ class AnchorRules:
     min_duration: timedelta = timedelta(minutes=15)
     min_fixes: int = 5
     min_course_spread_deg: float = 20.0
+    # Statek w ruchu melduje sie co kilkanascie sekund. Przerwa dluzsza niz to znaczy, ze nie wiemy,
+    # co robil w miedzyczasie - a wleczenie kotwicy jest twierdzeniem o zachowaniu CIAGLYM.
+    max_gap: timedelta = timedelta(minutes=20)
 
 
 @dataclass(frozen=True)
@@ -80,6 +99,15 @@ def _runs_near_lines(fixes: Sequence[ShipFix], index: LineIndex, rules: AnchorRu
         nearest = index.nearest(fix.lat, fix.lon, max_km=rules.buffer_km)
         in_speed = fix.sog is not None and rules.min_sog <= fix.sog <= rules.max_sog
         if nearest and nearest[1] <= rules.buffer_km and in_speed:
+            # Odcinek konczy sie takze wtedy, gdy miedzy meldunkami zrobila sie dziura albo gdy
+            # najblizsza jest juz inna linia. Bez tego piec pozycji co godzine skladalo sie w
+            # "czterogodzinne wleczenie kotwicy" bez zadnego dowodu, ze zachowanie trwalo miedzy
+            # nimi - a alarm ma dotyczyc jednego kabla, nie tego, ze statek mijal kilka.
+            if current:
+                poprzedni, _, poprzednia_linia = current[-1]
+                if fix.ts - poprzedni.ts > rules.max_gap or nearest[0].name != poprzednia_linia.name:
+                    yield current
+                    current = []
             current.append((fix, nearest[1], nearest[0]))
             continue
         if current:
@@ -157,9 +185,5 @@ def find_anchor_drag(
     return alerts
 
 
-def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Initial bearing between two points, for tests and for filling in a missing COG."""
-    d_lon = radians(lon2 - lon1)
-    y = sin(d_lon) * cos(radians(lat2))
-    x = cos(radians(lat1)) * sin(radians(lat2)) - sin(radians(lat1)) * cos(radians(lat2)) * cos(d_lon)
-    return (degrees(atan2(y, x)) + 360.0) % 360.0
+__all__ = ["AnchorRules", "AnchorAlert", "ShipFix", "bearing_deg", "by_ship",
+           "course_spread_deg", "find_anchor_drag"]

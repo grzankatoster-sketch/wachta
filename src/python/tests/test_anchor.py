@@ -117,3 +117,34 @@ class TestCourseSpread:
 def test_bearing_helper():
     assert bearing_deg(0.0, 0.0, 1.0, 0.0) == pytest.approx(0.0, abs=0.1)
     assert bearing_deg(0.0, 0.0, 0.0, 1.0) == pytest.approx(90.0, abs=0.1)
+
+
+def test_a_long_reporting_gap_breaks_the_segment():
+    """Znalezione w audycie: odcinek nie konczyl sie po dziurze w meldunkach.
+
+    Piec pozycji co godzine skladalo sie w "czterogodzinne wleczenie kotwicy", choc o tym, co statek
+    robil miedzy nimi, dane nie mowia nic. Wleczenie jest twierdzeniem o zachowaniu ciaglym.
+    """
+    line = Line("Estlink 2", "power", ((59.90, 26.00), (59.90, 26.40)))
+    rzadkie = [ShipFix("111", T0 + timedelta(hours=i), 59.9005, 26.10 + i * 0.001,
+                       3.0, (i * 30) % 360, "TEST") for i in range(5)]
+    assert find_anchor_drag(rzadkie, [line]) == []
+
+
+def test_the_same_behaviour_reported_normally_is_still_found():
+    line = Line("Estlink 2", "power", ((59.90, 26.00), (59.90, 26.40)))
+    geste = [ShipFix("111", T0 + timedelta(minutes=2 * i), 59.9005, 26.10 + i * 0.0006,
+                     3.0, (i * 12) % 360, "TEST") for i in range(12)]
+    assert len(find_anchor_drag(geste, [line])) == 1
+
+
+def test_a_segment_belongs_to_one_line_not_to_a_tour_of_several():
+    a = Line("Kabel A", "power", ((59.90, 26.00), (59.90, 26.10)))
+    b = Line("Kabel B", "telecom", ((59.90, 26.30), (59.90, 26.40)))
+    trasa = ([ShipFix("111", T0 + timedelta(minutes=2 * i), 59.9005, 26.05, 3.0, (i * 12) % 360)
+              for i in range(10)]
+             + [ShipFix("111", T0 + timedelta(minutes=20 + 2 * i), 59.9005, 26.35, 3.0, (i * 12) % 360)
+                for i in range(10)])
+    nazwy = {a.line_name for a in find_anchor_drag(trasa, [a, b])}
+    assert len(nazwy) <= 2
+    assert all(len({n}) == 1 for n in nazwy), "jeden alarm ma dotyczyc jednej linii"

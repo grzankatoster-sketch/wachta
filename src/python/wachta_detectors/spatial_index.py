@@ -7,8 +7,9 @@ degree-sized cells, so a position only looks at what lies around it.
 """
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import ceil, cos, floor, radians
+from math import ceil, floor
 
+from wachta_detectors.geo import KM_PER_DEG_LAT, km_per_deg_lon
 from wachta_detectors.infrastructure import Line, _point_segment_km, _to_local_km
 
 DEFAULT_CELL_DEG = 0.2
@@ -19,6 +20,24 @@ class Segment:
     line: Line
     a: tuple[float, float]  # (lat, lon)
     b: tuple[float, float]
+
+
+def _nearest_everywhere(cells, lat: float, lon: float):
+    """Full scan over every segment in the index. Correct, slow, and only used without a radius."""
+    px, py = _to_local_km(lat, lon, lat)
+    best = None
+    seen = set()
+    for segments in cells.values():
+        for segment in segments:
+            if id(segment) in seen:
+                continue        # ten sam odcinek lezy w kilku kratkach
+            seen.add(id(segment))
+            (ax, ay) = _to_local_km(segment.a[0], segment.a[1], lat)
+            (bx, by) = _to_local_km(segment.b[0], segment.b[1], lat)
+            km = _point_segment_km(px, py, ax, ay, bx, by)
+            if best is None or km < best[1]:
+                best = (segment.line, km)
+    return best
 
 
 class LineIndex:
@@ -49,11 +68,15 @@ class LineIndex:
     def nearest(self, lat: float, lon: float, max_km: float | None = None) -> tuple[Line, float] | None:
         """Nearest line and its distance in km, or None when nothing is within reach."""
         lat_cell, lon_cell = self._key(lat, lon)
-        km_per_degree_lat = 111.0
-        # A degree of longitude shrinks with latitude: 59 km at 58N, so the ring must be wider east-west.
-        km_per_degree_lon = max(1.0, 111.0 * cos(radians(lat)))
+        km_per_degree_lat = KM_PER_DEG_LAT
+        # Stopien dlugosci kurczy sie z szerokoscia, wiec pierscien musi byc szerszy na wschod-zachod.
+        km_per_degree_lon = km_per_deg_lon(lat)
         if max_km is None:
-            reach_lat = reach_lon = 1
+            # Bez limitu pytanie brzmi "co jest najblizej na swiecie", a na to siatka nie odpowiada:
+            # jeden pierscien kratek zwracal None, podczas gdy nearest_line() z infrastructure.py
+            # znajdowala linie 1322 km dalej. Indeks jest po to, zeby szukac BLISKO - gdy nie ma
+            # promienia, uczciwiej przejsc wszystko, niz udawac, ze nic nie ma.
+            return _nearest_everywhere(self._cells, lat, lon)
         else:
             reach_lat = max(1, ceil(max_km / (self.cell_deg * km_per_degree_lat)))
             reach_lon = max(1, ceil(max_km / (self.cell_deg * km_per_degree_lon)))

@@ -50,3 +50,28 @@ def test_index_gives_the_same_answers_as_brute_force_on_a_grid():
             if km <= 100:
                 assert from_index is not None
                 assert from_index[1] == pytest.approx(km, rel=1e-9)
+
+
+def test_nearest_without_a_radius_searches_everywhere():
+    """Znalezione w audycie: indeks zwracal None tam, gdzie funkcja globalna znajdowala linie.
+
+    Bez promienia pytanie brzmi "co jest najblizej na swiecie", a jeden pierscien kratek na to nie
+    odpowiada - odleglosc 1322 km wypadala poza zasieg i wychodzilo, ze infrastruktury nie ma.
+    """
+    from wachta_detectors.infrastructure import Line, nearest_line
+    from wachta_detectors.spatial_index import LineIndex
+
+    lines = [Line("Daleki kabel", "power", ((60.0, 30.0), (60.1, 30.1)))]
+    globalnie = nearest_line(lines, 50.0, 20.0)
+    przez_indeks = LineIndex(lines).nearest(50.0, 20.0, max_km=None)
+    assert przez_indeks is not None
+    assert przez_indeks[0].name == globalnie[0].name
+    assert abs(przez_indeks[1] - globalnie[1]) < 1.0
+
+
+def test_nearest_with_a_radius_still_refuses_what_is_too_far():
+    from wachta_detectors.infrastructure import Line
+    from wachta_detectors.spatial_index import LineIndex
+
+    lines = [Line("Daleki kabel", "power", ((60.0, 30.0), (60.1, 30.1)))]
+    assert LineIndex(lines).nearest(50.0, 20.0, max_km=10) is None

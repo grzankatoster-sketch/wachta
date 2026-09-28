@@ -106,3 +106,32 @@ def test_times_over_is_readable_but_not_the_decision():
     [spike] = detect_spikes(events, NOW)
     assert spike.times_over == pytest.approx(20.0)  # 10 przy oczekiwanych 0,5
     assert spike.expected == 0.5
+
+
+def test_events_stamped_in_the_future_do_not_raise_an_alarm():
+    """Znalezione w audycie: okno biezace nie mialo gornej granicy.
+
+    Znacznik z przyszlosci - zegar zrodla, blad parsowania albo zastepcze poludnie dla dzisiejszej
+    daty - wpadal do biezacego okna. Osiem takich zdarzen wystarczylo, zeby samo wywolalo alarm.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from wachta_detectors.anomalies import detect_spikes
+    from wachta_detectors.events import Event
+
+    now = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+
+    def event(i: int, hours: float) -> Event:
+        t = now + timedelta(hours=hours)
+        return Event(str(i), t.date(), t, "A", None, "B", None, "19", "190", 4,
+                     -9.0, 1, "X", "PL", 50.0, 20.0, "u")
+
+    tlo = [event(100 + i, -20 - i) for i in range(4)]
+    z_przyszlosci = [event(i, +5) for i in range(8)]
+    assert detect_spikes(z_przyszlosci + tlo, now,
+                         window=timedelta(hours=6), baseline=timedelta(hours=42)) == []
+
+    # Kontrola: prawdziwe skupisko sprzed godziny nadal ma byc widziane.
+    sprzed_godziny = [event(i, -1) for i in range(8)]
+    assert detect_spikes(sprzed_godziny + tlo, now,
+                         window=timedelta(hours=6), baseline=timedelta(hours=42))

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from math import cos, radians, sqrt
 from pathlib import Path
 
-EARTH_RADIUS_KM = 6371.0
+from .geo import EARTH_RADIUS_KM
 
 
 @dataclass(frozen=True)

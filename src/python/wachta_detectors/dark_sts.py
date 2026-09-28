@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 from .anchor import ShipFix
 from .gaps import GapAlert, GapRules, find_gaps, suspicious
-from .geo import haversine_km
+from .geo import KM_PER_NM, haversine_km
 from .sts import Loiter, StsRules, find_encounters, stationary_periods
 
 
@@ -70,15 +70,23 @@ def pair_up(loiters: Iterable[Loiter], gaps: Iterable[GapAlert],
         for gap in gaps:
             if gap.mmsi == loiter.mmsi:
                 continue
-            window = _overlap(loiter.start, loiter.end, gap.vanished_at, gap.resumed_at)
-            if window is None or window[1] - window[0] < rules.min_overlap:
-                continue
             km = haversine_km(loiter.lat, loiter.lon, gap.vanish_lat, gap.vanish_lon)
             if km > rules.max_km:
                 continue
-            detour = km + haversine_km(loiter.lat, loiter.lon, gap.resume_lat, gap.resume_lon)
-            sailing = timedelta(hours=detour / 1.852 / rules.speed_kt)
-            spare = gap.duration - sailing
+            back_km = haversine_km(loiter.lat, loiter.lon, gap.resume_lat, gap.resume_lon)
+            detour = km + back_km
+
+            # Okno liczone od chwili, w ktorej zgaszony statek MOGL tu dotrzec, do chwili, w ktorej
+            # musial juz ruszyc, zeby zdazyc na swoja pozycje powrotu. Pierwsza wersja brala cala
+            # cisze i osobno sprawdzala, czy droga sie miesci - przez co zglaszala spotkania, na
+            # ktore drugi statek zdazylby dopiero po koncu postoju widocznego.
+            arrives = gap.vanished_at + timedelta(hours=km / KM_PER_NM / rules.speed_kt)
+            must_leave = gap.resumed_at - timedelta(hours=back_km / KM_PER_NM / rules.speed_kt)
+            window = _overlap(loiter.start, loiter.end, arrives, must_leave)
+            if window is None or window[1] - window[0] < rules.min_overlap:
+                continue
+
+            spare = gap.duration - timedelta(hours=detour / KM_PER_NM / rules.speed_kt)
             if spare < rules.min_stop:
                 continue        # nie zdazylby podejsc, postac i wrocic - to nie bylo spotkanie
             found.append(DarkSts(
@@ -100,9 +108,15 @@ def find_dark_sts(fixes: Sequence[ShipFix], sts_rules: StsRules = StsRules(),
                   gap_rules: GapRules = GapRules(),
                   rules: DarkStsRules = DarkStsRules()) -> list[DarkSts]:
     """The whole join from raw positions: loiters without a visible partner, next to a silence."""
-    paired = set()
+    # Wykluczamy POSTOJE nakladajace sie na widoczne spotkanie, a nie caly numer MMSI. Pierwsza
+    # wersja skreslala statek na cala dobe, wiec jedno bunkrowanie rano potrafilo ukryc niezalezny
+    # ciemny przeladunek wieczorem.
+    seen: dict[str, list[tuple[datetime, datetime]]] = {}
     for e in find_encounters(fixes, sts_rules):
-        paired.add(e.mmsi_a)
-        paired.add(e.mmsi_b)
-    alone = [p for p in stationary_periods(fixes, sts_rules) if p.mmsi not in paired]
+        for mmsi in (e.mmsi_a, e.mmsi_b):
+            seen.setdefault(mmsi, []).append((e.start, e.end))
+
+    alone = [p for p in stationary_periods(fixes, sts_rules)
+             if not any(_overlap(p.start, p.end, start, end)
+                        for start, end in seen.get(p.mmsi, ()))]
     return pair_up(alone, suspicious(find_gaps(fixes, gap_rules)), rules)

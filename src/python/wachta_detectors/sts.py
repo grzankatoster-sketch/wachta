@@ -17,9 +17,12 @@ a lone ship loitering where nobody else is, with a gap in someone else's track n
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import ceil
 
-from .anchor import ShipFix
-from .geo import haversine_km
+from .anchor import ShipFix, by_ship
+from .geo import KM_PER_DEG_LAT
+from .geo import cell_of as _cell
+from .geo import haversine_km, implied_kt, km_per_deg_lon
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,9 @@ class StsRules:
     transit_sog: float = 4.0
     approach: timedelta = timedelta(hours=6)
     max_gap: timedelta = timedelta(minutes=12)   # przerwa dluzsza niz ta konczy spotkanie
+    # Postoj jest MIEJSCEM. Statek na kotwicy zatacza luk na lancuchu, ale nie przenosi sie o
+    # kilometry - a przy max_sog 3 wezly i przerwie 12 minut zmiescilby sie w tym 1,1 km.
+    max_spread_km: float = 2.0
     cell_deg: float = 0.02             # ok. 2,2 km - siatka do szukania sasiadow
     # Kotwicowisko wyprowadzone z danych: kratka, w ktorej przez dobe stalo wiele roznych statkow.
     anchorage_cell_deg: float = 0.05
@@ -63,10 +69,6 @@ class Encounter:
         return self.end - self.start
 
 
-def _cell(lat: float, lon: float, size: float) -> tuple[int, int]:
-    return int(lat // size), int(lon // size)
-
-
 def anchorages(fixes: Iterable[ShipFix], rules: StsRules = StsRules()) -> set[tuple[int, int]]:
     """Squares where many different ships sat still - read off the traffic, not off a chart."""
     still: dict[tuple[int, int], set[str]] = {}
@@ -82,13 +84,8 @@ def _under_way(fixes: Iterable[ShipFix], rules: StsRules) -> dict[str, list[date
     Speed is taken from the report when the ship sends one, and worked out from two positions when it
     does not. A missing speed field must not silently turn a sailing ship into a moored one.
     """
-    tracks: dict[str, list[ShipFix]] = {}
-    for fix in fixes:
-        tracks.setdefault(fix.mmsi, []).append(fix)
-
     moving: dict[str, list[datetime]] = {}
-    for mmsi, track in tracks.items():
-        track.sort(key=lambda f: f.ts)
+    for mmsi, track in by_ship(fixes).items():
         stamps = []
         for i, fix in enumerate(track):
             fast = fix.sog is not None and fix.sog >= rules.transit_sog
@@ -96,7 +93,7 @@ def _under_way(fixes: Iterable[ShipFix], rules: StsRules) -> dict[str, list[date
                 hours = (fix.ts - track[i - 1].ts).total_seconds() / 3600
                 if 0 < hours <= 1:
                     km = haversine_km(track[i - 1].lat, track[i - 1].lon, fix.lat, fix.lon)
-                    fast = km / 1.852 / hours >= rules.transit_sog
+                    fast = implied_kt(km, hours) >= rules.transit_sog
             if fast:
                 stamps.append(fix.ts)
         if stamps:
@@ -117,12 +114,37 @@ def _sailed_near(stamps: Sequence[datetime], start: datetime, end: datetime,
     return left < len(stamps) and stamps[left] <= hi
 
 
+def slow_fixes(fixes: Iterable[ShipFix], rules: StsRules) -> list[ShipFix]:
+    """Fixes at which a transfer could be happening - slow by the ship's own account, or by ours.
+
+    A missing speed field used to mean "slow", which let a ship crossing the strait at twenty knots
+    count as standing still for over an hour. Where the field is absent the speed is worked out from
+    the neighbouring positions instead, and only then judged.
+    """
+    out: list[ShipFix] = []
+    for track in by_ship(fixes).values():
+        for i, fix in enumerate(track):
+            if fix.sog is not None:
+                if fix.sog <= rules.max_sog:
+                    out.append(fix)
+                continue
+            speeds = []
+            for other in (track[i - 1] if i else None, track[i + 1] if i + 1 < len(track) else None):
+                if other is None:
+                    continue
+                hours = abs((fix.ts - other.ts).total_seconds()) / 3600
+                if 0 < hours <= 1:
+                    speeds.append(implied_kt(haversine_km(fix.lat, fix.lon, other.lat, other.lon), hours))
+            # Brak sasiada w zasiegu godziny: nie ma jak ocenic, wiec nie zgadujemy na korzysc alarmu.
+            if speeds and min(speeds) <= rules.max_sog:
+                out.append(fix)
+    return out
+
+
 def _slow_by_minute(fixes: Iterable[ShipFix], rules: StsRules) -> dict[datetime, list[ShipFix]]:
-    """Only the fixes a transfer could happen at, grouped by the minute they belong to."""
+    """The same fixes, grouped by the minute they belong to."""
     frames: dict[datetime, list[ShipFix]] = {}
-    for fix in fixes:
-        if fix.sog is not None and fix.sog > rules.max_sog:
-            continue
+    for fix in slow_fixes(fixes, rules):
         frames.setdefault(fix.ts.replace(second=0, microsecond=0), []).append(fix)
     return frames
 
@@ -135,8 +157,17 @@ def _pairs_in_frame(frame: Sequence[ShipFix], rules: StsRules):
 
     # Pelne sasiedztwo, a nie polowa: przy polowie para lezaca w dwoch kratkach wypadalaby wtedy,
     # gdy porzadek numerow MMSI i porzadek kratek sa przeciwne. Duplikaty odsiewa warunek nizej.
+    #
+    # Zasieg liczony osobno dla obu osi, bo stopien dlugosci kurczy sie z szerokoscia: na 75 stopniu
+    # kratka 0,02 stopnia ma w poziomie 0,57 km, wiec jeden pierscien sasiadow nie siega nawet
+    # dopuszczalnych 0,8 km i para po prostu znika. Ten sam blad byl juz raz w spatial_index.py.
+    rows = ceil(rules.max_separation_km / (rules.cell_deg * KM_PER_DEG_LAT))
     for (row, col), here in grid.items():
-        neighbours = [f for dr in (-1, 0, 1) for dc in (-1, 0, 1)
+        lat = here[0].lat
+        cols = ceil(rules.max_separation_km / (rules.cell_deg * km_per_deg_lon(lat)))
+        neighbours = [f
+                      for dr in range(-rows, rows + 1)
+                      for dc in range(-cols, cols + 1)
                       for f in grid.get((row + dr, col + dc), ())]
         for a in here:
             for b in neighbours:
@@ -250,26 +281,36 @@ def stationary_periods(fixes: Sequence[ShipFix], rules: StsRules = StsRules()) -
 
     D5 needs two hulls to see a meeting. When the second transponder is off there is only one, and
     then this is all that remains visible: a ship that stopped in open water for no stated reason.
+
+    Segments are cut on the full track and only then reduced to the slow parts, never the other way
+    round. Dropping the fast positions first hides the proof that the ship left: a 40-minute stop, a
+    6 km passage and a second 40-minute stop came back as one 92-minute loiter centred on a point
+    the ship never sat at. A stop ends on confirmed movement, on too large a displacement, or on a
+    gap in the reports - the three ways the data can say "this is no longer the same standstill".
     """
     parked = anchorages(fixes, rules)
     moving = _under_way(fixes, rules)
-
-    tracks: dict[str, list[ShipFix]] = {}
-    for fix in fixes:
-        if fix.sog is None or fix.sog <= rules.max_sog:
-            tracks.setdefault(fix.mmsi, []).append(fix)
+    wolne = {id(f) for f in slow_fixes(fixes, rules)}
 
     runs: list[list[ShipFix]] = []
-    for track in tracks.values():
-        track.sort(key=lambda f: f.ts)
-        run = [track[0]]
-        for fix in track[1:]:
-            if fix.ts - run[-1].ts <= rules.max_gap:
-                run.append(fix)
+    for track in by_ship(fixes).values():
+        run: list[ShipFix] = []
+        for fix in track:
+            if id(fix) not in wolne:
+                # Potwierdzony ruch konczy postoj. To nie jest przerwa w danych, tylko dowod, ze
+                # statek juz nie stal - i wlasnie ten dowod znikal, gdy szybkie pozycje odrzucano
+                # przed segmentacja zamiast po niej.
+                if run:
+                    runs.append(run)
+                run = []
                 continue
+            if run and (fix.ts - run[-1].ts > rules.max_gap
+                        or haversine_km(run[0].lat, run[0].lon, fix.lat, fix.lon) > rules.max_spread_km):
+                runs.append(run)
+                run = []
+            run.append(fix)
+        if run:
             runs.append(run)
-            run = [fix]
-        runs.append(run)
 
     out: list[Loiter] = []
     for run in runs:

@@ -127,8 +127,21 @@ def test_empty_and_single_fix_tracks_are_safe():
     assert examine([fix("219000111", 0, 55.0, 13.0)]).verdict == "spojny"
 
 
-def test_two_fixes_at_the_same_instant_do_not_divide_by_zero():
-    track = [fix("219000111", 0, 55.0, 13.0), fix("219000111", 0, 57.5, 18.0)]
+def test_two_distant_fixes_in_the_same_second_are_impossible():
+    # Znalezione w audycie: kod zwracal 0 wezlow przy zerowym czasie, zeby nie dzielic przez zero,
+    # i tym samym wyrzucal najmocniejszy mozliwy dowod. Kadlub moze byc szybki, ale nie moze byc
+    # w dwoch miejscach w tej samej sekundzie.
+    track = [fix("219000111", 0, 55.0, 13.0), fix("219000111", 0, 57.5, 18.0),
+             fix("219000111", 2, 55.01, 13.0)]
+    report = examine(sorted(track, key=lambda f: f.ts))
+    assert report.jumps, "sprzecznosc w tej samej sekundzie ma byc widoczna"
+    assert report.verdict != "spojny"
+
+
+def test_same_instant_in_the_same_place_is_only_a_duplicate():
+    # Dwa meldunki z tej samej sekundy i tego samego miejsca to powtorzony pakiet, nie dwa statki.
+    track = [fix("219000111", 0, 55.0, 13.0), fix("219000111", 0, 55.0, 13.0),
+             fix("219000111", 2, 55.004, 13.0)]
     assert examine(track).verdict == "spojny"
 
 

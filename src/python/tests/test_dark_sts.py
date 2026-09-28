@@ -131,3 +131,33 @@ def test_spare_time_is_what_the_transfer_would_have_had():
     assert d.detour_km >= d.distance_km
     assert d.spare_min >= 30
     assert d.spare_min < d.gap_min
+
+
+def test_dark_ship_arriving_after_the_loiter_ended_is_not_a_meeting():
+    """Znalezione w audycie: okno brano z calej ciszy, wiec wystarczylo, ze luka ja obejmuje.
+
+    Liczby dobrane tak, zeby trafic dokladnie w te regule, a nie w zapas czasu: droga tam i z
+    powrotem (40 km przy 12 w. = 108 min) miesci sie w 400-minutowej ciszy z duzym zapasem, ale
+    zgaszony statek dotrze na miejsce dopiero w 54. minucie - a widoczny stoi tylko do 45.
+    """
+    km20 = 20 / 111.0
+    stoi = ([fix("111", -20 + i, 55.00 - (20 - i) * 0.004, 13.00, 9.0, "WIDOCZNY") for i in range(20)]
+            + [fix("111", m, 55.00, 13.00, 0.3, "WIDOCZNY") for m in range(45)])
+    ciemny = ([fix("222", -10 + i, 55.00 - km20 - (10 - i) * 0.004, 13.00, 9.0, "ZGASZONY") for i in range(10)]
+              + [fix("222", 400 + i, 55.00 + km20 + i * 0.004, 13.00, 9.0, "ZGASZONY") for i in range(10)])
+    # Swiadkowie musza byc w kratce ZANIKNIECIA, nie tylko przy stojacym statku - inaczej D4 uzna
+    # cisze za zwykla dziure w zasiegu i para nie powstanie z zupelnie innego powodu.
+    slychac = witnesses(minutes=430) + witnesses(lat=55.00 - km20, minutes=430)
+    wszystko = stoi + ciemny + slychac
+    assert suspicious(find_gaps(wszystko)), "luka ma byc wykryta - inaczej test nie bada tego, co mial"
+    assert [d for d in find_dark_sts(wszystko) if d.visible_mmsi == "111"] == []
+
+
+def test_a_visible_meeting_in_the_morning_does_not_hide_a_dark_one_at_night():
+    # Znalezione w audycie: jedno spotkanie D5 skreslalo numer ze WSZYSTKICH postojow w dobie.
+    rano = (arrives_and_stops("111", 55.00, 13.00, stop_at=0, minutes=90, name="WIDOCZNY")
+            + arrives_and_stops("333", 55.0027, 13.00, stop_at=0, minutes=90, name="PARTNER"))
+    wieczorem = (arrives_and_stops("111", 55.00, 13.00, stop_at=400, minutes=120, name="WIDOCZNY")
+                 + goes_dark("222", 55.01, 13.00, 410, 520, name="ZGASZONY"))
+    found = find_dark_sts(rano + wieczorem + witnesses(minutes=600))
+    assert [(d.visible_mmsi, d.dark_mmsi) for d in found] == [("111", "222")]

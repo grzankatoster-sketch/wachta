@@ -152,3 +152,23 @@ def test_plain_sailing_through_the_silence_is_the_case_we_want():
     alert = suspicious(find_gaps(track + crowd()))[0]
     assert alert.motion == "plynal w czasie ciszy"
     assert 2 < alert.implied_kt < 30
+
+
+def test_station_outage_counts_parked_ships_too():
+    """Znalezione w audycie: licznik rownoczesnych zanikow powstawal dopiero z kandydatow.
+
+    Statki stojace pod stacja nie przechodzily filtru ruchu, wiec padajaca stacja cichla "tylko
+    jednemu" statkowi - temu plynacemu - i jego cisza dostawala etykiete dzialajacego odbioru.
+    """
+    fixes = []
+    for i in range(5):                      # piec statkow STOJACYCH: nie sa kandydatami...
+        fixes += sailing(f"stoi{i}", 0, 30, lat=59.90 + i * 0.001, sog=0.1)
+        fixes += sailing(f"stoi{i}", 150, 180, lat=59.90 + i * 0.001, sog=0.1)
+    fixes += sailing("111", 0, 30) + sailing("111", 150, 180, lon=26.30)   # ...a ten plynie
+    fixes += crowd()
+
+    alerts = [a for a in find_gaps(fixes) if a.mmsi == "111"]
+    assert alerts, "zanik plynacego statku ma byc widziany"
+    assert alerts[0].simultaneous >= 4
+    assert alerts[0].verdict == "prawdopodobna awaria odbioru"
+    assert suspicious(alerts) == []
