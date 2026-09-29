@@ -13,6 +13,8 @@ import { shipLayers } from "./layers/ships";
 import { alertsLayer } from "./layers/alerts";
 import { jammingLayer } from "./layers/jamming";
 import { tripsLayer } from "./layers/trips";
+import { infrastructureLayers } from "./layers/infrastruktura";
+import { useInfrastruktura } from "./infrastruktura";
 import { isCargo } from "./colors";
 import { kategoriaSamolotu, kategoriaStatku, obecne } from "./typy";
 import { useLive } from "./live";
@@ -70,6 +72,8 @@ export default function App() {
     a.isMilitary ? widoczne.wojskowe : widoczne.cywilne);
   const widoczneStatki = ships.filter((s) =>
     isCargo(s.shipType) ? widoczne.ladunek : widoczne.statki);
+  const infrastruktura = useInfrastruktura(widoczne.infrastruktura);
+  const widoczneLinie = widoczne.infrastruktura ? infrastruktura : [];
   const widoczneAlarmy = widoczne.alarmy ? alerts : [];
   const widoczneZaklocenia = widoczne.zaklocenia ? jamming : [];
 
@@ -98,6 +102,7 @@ export default function App() {
     cywilne: aircraft.filter((a) => !a.isMilitary && !a.onGround).length,
     ladunek: ships.filter((s) => isCargo(s.shipType)).length,
     statki: ships.filter((s) => !isCargo(s.shipType)).length,
+    infrastruktura: infrastruktura.length,
     alarmy: alerts.length,
     zaklocenia: jamming.length,
   };
@@ -110,9 +115,12 @@ export default function App() {
   };
 
   const layers = replay
-    ? [jammingLayer(widoczneZaklocenia), tripsLayer(replay.trips, currentTime), alertsLayer(widoczneAlarmy)]
+    ? [jammingLayer(widoczneZaklocenia), ...infrastructureLayers(widoczneLinie),
+       tripsLayer(replay.trips, currentTime), alertsLayer(widoczneAlarmy)]
     : [
         jammingLayer(widoczneZaklocenia),
+        // Dno pod ruchem: kable i rurociagi leza tam od lat i sa tlem dla tego, co plynie.
+        ...infrastructureLayers(widoczneLinie),
         // Statki pod samolotami: jest ich osiem razy wiecej i sa mniejsze, wiec lezac na wierzchu
         // zabieraly by klikniecia maszynom, ktorych i tak jest na mapie garstka.
         ...shipLayers(widoczneStatki, terazStatki),

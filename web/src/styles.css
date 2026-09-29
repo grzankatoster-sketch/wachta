@@ -418,6 +418,10 @@ body {
 .znak.kropka { border-radius: 50%; }
 .znak.obwodka { border-radius: 50%; background: none !important; }
 .znak.heksagon { border-radius: 2px; transform: rotate(45deg); }
+/* Kreska, bo na mapie to kreska. Kropka w legendzie obok linii na mapie kazalaby czytelnikowi
+   szukac kropek, ktorych tam nie ma. Wysokosc 3px przy 12px szerokosci - ten sam ksztalt co
+   1.2-pikselowa sciezka na ekranie, tylko powiekszony do czytelnosci w panelu. */
+.znak.linia { height: 3px; border: none; align-self: center; border-radius: 2px; }
 
 .warstwy .ostrzezenie {
   margin: 8px 0 0;

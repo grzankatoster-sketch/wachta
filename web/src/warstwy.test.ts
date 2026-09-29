@@ -33,7 +33,7 @@ describe("legenda", () => {
   it("kazda warstwa ma kolor i ksztalt, zeby znak w legendzie wygladal jak ten na mapie", () => {
     for (const w of WARSTWY) {
       expect(w.kolor, w.id).toMatch(/^rgb\(/);
-      expect(["kropka", "obwodka", "heksagon"]).toContain(w.ksztalt);
+      expect(["kropka", "obwodka", "heksagon", "linia"]).toContain(w.ksztalt);
     }
   });
 });
@@ -65,7 +65,7 @@ describe("wlaczanie i wylaczanie", () => {
     // za jedna odpowiada czytelnik, za druga system.
     expect(wszystkoWylaczone(WSZYSTKO_WIDOCZNE)).toBe(false);
     const nic: Widoczne = { wojskowe: false, cywilne: false, ladunek: false, statki: false,
-                            alarmy: false, zaklocenia: false };
+                            infrastruktura: false, alarmy: false, zaklocenia: false };
     expect(wszystkoWylaczone(nic)).toBe(true);
   });
 });

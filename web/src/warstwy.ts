@@ -1,4 +1,4 @@
-import { GREY, RED, SHIP_CARGO, SHIP_OTHER } from "./colors";
+import { GREY, KABEL, RED, SHIP_CARGO, SHIP_OTHER } from "./colors";
 
 /**
  * What is on the map, in words, together with the switch that isolates it.
@@ -9,7 +9,8 @@ import { GREY, RED, SHIP_CARGO, SHIP_OTHER } from "./colors";
  * the first person to open it said "some dots, nothing is clickable, I have no idea what this is".
  */
 
-export type IdWarstwy = "wojskowe" | "cywilne" | "ladunek" | "statki" | "alarmy" | "zaklocenia";
+export type IdWarstwy =
+  | "wojskowe" | "cywilne" | "ladunek" | "statki" | "infrastruktura" | "alarmy" | "zaklocenia";
 
 /**
  * Legend headings.
@@ -34,7 +35,7 @@ export interface OpisWarstwy {
   /** One sentence: what the mark means, not what it is called. */
   opis: string;
   kolor: string;
-  ksztalt: "kropka" | "obwodka" | "heksagon";
+  ksztalt: "kropka" | "obwodka" | "heksagon" | "linia";
 }
 
 const rgb = ([r, g, b]: [number, number, number]) => `rgb(${r},${g},${b})`;
@@ -73,6 +74,17 @@ export const WARSTWY: OpisWarstwy[] = [
     ksztalt: "kropka",
   },
   {
+    id: "infrastruktura",
+    grupa: "morze",
+    nazwa: "Kable i rurociągi",
+    // "Rurociagi", nie "gazociagi": wsrod 16 linii tej klasy sa Nord Stream i Baltic Pipe, ale tez
+    // wylot sciekow w Helsinkach i wodociag pod Wyborgiem. Nazwanie ich wszystkich gazociagami
+    // byloby dopisaniem do danych czegos, czego w nich nie ma.
+    opis: "Kable energetyczne i telekomunikacyjne (fioletowe) oraz rurociągi (brązowe) z OpenStreetMap. To od tych linii detektor D6 liczy odległość statku — trasy są przybliżone, bo rysowali je ludzie, a nie geodeci.",
+    kolor: rgb(KABEL),
+    ksztalt: "linia",
+  },
+  {
     id: "alarmy",
     grupa: "detektory",
     nazwa: "Alarmy detektorów",
@@ -104,6 +116,8 @@ export const WSZYSTKO_WIDOCZNE: Widoczne = {
   cywilne: true,
   ladunek: true,
   statki: true,
+  // Wlaczona domyslnie, bo alarm D6 mowi "0,1 km od linii" i bez tej linii jest nieweryfikowalny.
+  infrastruktura: true,
   alarmy: true,
   zaklocenia: true,
 };

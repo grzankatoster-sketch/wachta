@@ -2,6 +2,7 @@ import type { AlertDto, JammingDto, LiveAircraft, LiveShip } from "./api";
 import { parseEvidence } from "./api";
 import { NAZWY, dopisek, podmiot, szczegoly } from "./alert-text";
 import { ocen, type Ocena } from "./ocena";
+import { szczegolyLinii, type LiniaInfrastruktury } from "./infrastruktura";
 
 /**
  * Turns one clicked map object into the three sections the detail panel shows: what it is, what it
@@ -17,7 +18,8 @@ export type Selection =
   | { kind: "aircraft"; data: LiveAircraft }
   | { kind: "alert"; data: AlertDto }
   | { kind: "ship"; data: LiveShip }
-  | { kind: "jamming"; data: JammingDto };
+  | { kind: "jamming"; data: JammingDto }
+  | { kind: "infrastruktura"; data: LiniaInfrastruktury };
 
 export interface Punkt {
   lon: number;
@@ -459,6 +461,7 @@ export function zbudujSzczegoly(sel: Selection): Szczegoly {
   if (sel.kind === "aircraft") return aircraftDetail(sel.data);
   if (sel.kind === "ship") return shipDetail(sel.data);
   if (sel.kind === "jamming") return jammingDetail(sel.data);
+  if (sel.kind === "infrastruktura") return szczegolyLinii(sel.data);
   return alertDetail(sel.data);
 }
 
@@ -473,5 +476,7 @@ export function selectionFromPicked(object: unknown): Selection | null {
   if ("mmsi" in object && "lat" in object) return { kind: "ship", data: object as LiveShip };
   if ("detector" in object) return { kind: "alert", data: object as AlertDto };
   if ("h3" in object) return { kind: "jamming", data: object as JammingDto };
+  // Linia infrastruktury: "sciezka" nie wystepuje w zadnym z powyzszych, wiec rozroznia sama.
+  if ("sciezka" in object && "rodzaj" in object) return { kind: "infrastruktura", data: object as LiniaInfrastruktury };
   return null;
 }
