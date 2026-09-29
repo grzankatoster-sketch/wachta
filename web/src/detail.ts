@@ -2,6 +2,7 @@ import type { AlertDto, JammingDto, LiveAircraft, LiveShip } from "./api";
 import { parseEvidence } from "./api";
 import { NAZWY, dopisek, podmiot, szczegoly } from "./alert-text";
 import { ocen, type Ocena } from "./ocena";
+import { KATEGORIE, kategoriaSamolotu } from "./typy";
 import { szczegolyLinii, type LiniaInfrastruktury } from "./infrastruktura";
 import { podstawaSladu, skadPlynie, type StanSladu } from "./slad";
 
@@ -61,7 +62,13 @@ function aircraftDetail(a: LiveAircraft): Szczegoly {
   const nazwa = a.flight?.trim() || a.hex;
   const coToJest: string[] = [`Znak wywoławczy / hex: ${nazwa}${a.flight ? ` (${a.hex})` : ""}`];
   if (a.typeCode) coToJest.push(`Typ statku powietrznego: ${a.typeCode}`);
-  coToJest.push(a.isMilitary ? "Oznaczony jako wojskowy" : "Oznaczony jako cywilny");
+  // CZYJE to twierdzenie, nie tylko jakie. Flaga wojskowa nie jest wlasnoscia samolotu, tylko
+  // wpisem w bazie adsb.lol - a inne bazy potrafia miec inny wpis dla tego samego kadluba.
+  coToJest.push(a.isMilitary
+    ? "Wojskowy — tak oznacza go baza adsb.lol (dbFlags)"
+    : "Cywilny — nieobecny w bazie wojskowej adsb.lol");
+  const kategoria = KATEGORIE[kategoriaSamolotu(a)].nazwa;
+  coToJest.push(`Kategoria: ${kategoria} — wywnioskowana z kodu typu, nie podana przez samolot`);
   if (a.altBaroFt !== null) coToJest.push(`Wysokość barometryczna: ${a.altBaroFt} ft`);
   if (a.gsKt !== null) coToJest.push(`Prędkość względem ziemi: ${a.gsKt} w.`);
   if (a.trackDeg !== null) coToJest.push(`Kurs: ${a.trackDeg}°`);
@@ -77,7 +84,9 @@ function aircraftDetail(a: LiveAircraft): Szczegoly {
   ];
   if (a.isMilitary) {
     coZTegoWynika.push(
-      "Klasyfikacja wojskowy/cywilny pochodzi z bazy typów kadłubów i numeru hex, nie z deklaracji lotu.",
+      "Samolot nie nadaje informacji, czy jest wojskowy. Ta etykieta to wpis w bazie adsb.lol " +
+      "przypisany do numeru hex — inne bazy, na przykład Flightradar24, prowadzą własne listy i " +
+      "potrafią ten sam kadłub opisać inaczej. Rozbieżność jest faktem o bazach, nie o maszynie.",
     );
   }
 
@@ -89,6 +98,7 @@ function aircraftDetail(a: LiveAircraft): Szczegoly {
     naPodstawie: [
       "Źródło: odbiór ADS-B (patrz stopka źródeł na mapie za dokładną licencję i atrybucję).",
       "Pozycja to ostatni odebrany komunikat, nie potwierdzenie trasy ani celu lotu.",
+      "Kategoria (rozpoznanie, tankowanie, transport, śmigłowiec, bojowy) to nasz wniosek z kodu typu ICAO. Kod typu mówi, jaki to model, a nie po co leci: tablica obejmuje tylko płatowce zbudowane do jednej roli, a wszystko, czego nie rozpoznaje, zostaje po prostu „wojskowy”.",
       "Czego to nie dowodzi: brak kolejnej transmisji w danej chwili nie oznacza awarii ani celowego ukrycia - oba wyglądają w danych identycznie.",
     ],
     tor: null,

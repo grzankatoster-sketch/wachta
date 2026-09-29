@@ -68,8 +68,16 @@ export const KATEGORIE: Record<Kategoria, OpisKategorii> = {
  * nearest box, which might not be.
  */
 const TYPY_POWIETRZNE: Array<[KategoriaPowietrzna, string[]]> = [
+  // Tylko platowce ZBUDOWANE do tej roli i praktycznie nielatajace w zadnej innej.
+  //
+  // Pierwsza wersja miala tu takze CL60, GLF5, ASTR, F900 i SW4 - czyli Challengera, Gulfstreama,
+  // Astre, Falcona i Metro. To sa odrzutowce biznesowe. Owszem, czesc egzemplarzy lata w wersjach
+  // specjalnych, ale przytlaczajaca wiekszosc wozi ludzi, wiec z kodu typu NIE WYNIKA misja - a
+  // docstring tego pliku mowi wprost, ze model to nie misja. Zlapane na zywym ruchu 2026-09-29:
+  // BRIO66 (CL60, N159L) nad Klajpeda byl podpisany "Rozpoznanie i dozor" wylacznie dlatego, ze
+  // tablica tak mowila. Zadnych przeslanek poza modelem nie bylo.
   ["rozpoznanie", ["RC13", "RC135", "RC12", "P8", "P3", "EP3", "RQ4", "MQ9", "E3TF", "E3CF", "E6",
-                   "E8", "U2", "SW4", "CL60", "GLF5", "ASTR", "F900", "P1"]],
+                   "E8", "U2", "P1"]],
   ["tankowanie",  ["K35R", "K35E", "KC10", "KC30", "KC46", "VOYA", "A332", "A310", "TRIS"]],
   ["transport",   ["C17", "C130", "C30J", "C160", "A400", "C5M", "AN12", "AN26", "AN124", "C295",
                    "CN35", "C295", "C27J", "SB20"]],
