@@ -59,6 +59,9 @@ let okno = null;
 let ostatniBlad = null;
 
 function powiedz(krok, stan, szczegol) {
+  // Takze na stdout. Ekran startowy widzi tylko ten, kto patrzy na okno; kiedy cos pojdzie nie tak
+  // na cudzej maszynie albo w tle, jedyne, co zostaje, to log - a diagnoza bez logu to zgadywanie.
+  console.log(`[wachta] ${krok}: ${stan}${szczegol ? " - " + szczegol : ""}`);
   if (okno && !okno.isDestroyed()) {
     okno.webContents.send("wachta:krok", { krok, stan, szczegol: szczegol || "" });
   }
@@ -203,13 +206,24 @@ async function startuj() {
   }
 }
 
-// Proces GPU wywalal sie tu z naruszeniem ochrony pamieci (-1073741819) i zabieral okno ze soba.
-// Sterownik kompozytora nie jest nam potrzebny - deck.gl rysuje przez WebGL w procesie renderera,
-// ktory po tej zmianie idzie przez SwiftShader, jesli sprzetowy kontekst zawiedzie. Lepiej mapa
-// rysowana wolniej niz okno, ktore znika na rozmowie kwalifikacyjnej.
-app.commandLine.appendSwitch("disable-gpu-compositing");
-app.commandLine.appendSwitch("use-angle", "d3d11");
-app.commandLine.appendSwitch("enable-unsafe-swiftshader");
+// Sterownik grafiki, wybrany pomiarem, nie domyslem.
+//
+// Domyslna konfiguracja dawala na tej maszynie czarne okno: proces GPU ginal z naruszeniem ochrony
+// pamieci (-1073741819), a mapa jest w WebGL, wiec nie zostawalo nic do pokazania. Pierwsza proba -
+// wylaczenie kompozycji GPU - rysowala, ale proces GPU nadal ginal i okno czernialo po chwili.
+//
+// Zmierzone na uruchomionej aplikacji (probka-gpu.js, srednia jasnosc pikseli i udzial pikseli
+// jasniejszych od tla, 1264x735):
+//
+//   brak przelacznikow                17.7   0.0 %   GPU padl   <- czarne okno
+//   disable-gpu-compositing + d3d11  164.5  71.3 %   GPU padl   <- rysuje, ale nadal padal
+//   use-angle=gl                     161.9  70.6 %   GPU zyje   <- to
+//   use-angle=d3d11                   17.7   0.0 %   GPU padl
+//   disable-gpu-sandbox               17.7   0.0 %   GPU padl
+//
+// ANGLE przez OpenGL zamiast przez Direct3D 11 jest jedynym wariantem, w ktorym proces GPU w ogole
+// nie ginie, przy tej samej jakosci rysowania.
+app.commandLine.appendSwitch("use-angle", "gl");
 
 app.whenReady().then(() => {
   utworzOkno();
@@ -220,6 +234,19 @@ app.whenReady().then(() => {
     await startuj();
   });
   ipcMain.handle("wachta:blad", () => ostatniBlad);
+
+  // Gdyby mimo wszystko padl: czarne okno to najgorsza z mozliwych odpowiedzi, bo wyglada jak
+  // zawieszenie aplikacji, a nie jak awaria sterownika. Przeladowanie odtwarza kontekst WebGL.
+  app.on("child-process-gone", (_zdarzenie, szczegoly) => {
+    if (szczegoly.type !== "GPU" || !okno || okno.isDestroyed()) return;
+    console.warn(`Proces GPU zginal (${szczegoly.reason}) - przeladowuje widok.`);
+    okno.webContents.reload();
+  });
+
+  okno.webContents.on("render-process-gone", (_zdarzenie, szczegoly) => {
+    console.warn(`Proces renderera zginal (${szczegoly.reason}) - przeladowuje widok.`);
+    if (okno && !okno.isDestroyed()) okno.reload();
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) utworzOkno();
