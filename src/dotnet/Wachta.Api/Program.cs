@@ -15,6 +15,7 @@ app.MapOpenApi();
 app.MapAircraftEndpoints();
 app.MapShipEndpoints();
 app.MapDetectorEndpoints();
+app.MapConflictEndpoints();
 app.MapSearchEndpoints();
 app.MapHub<LiveHub>("/hubs/live");
 
