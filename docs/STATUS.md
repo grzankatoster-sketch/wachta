@@ -192,6 +192,10 @@ docker compose up -d --build
 Konta i klucze API (zadanie T0.2 w planie działania): AISStream, OpenSky, NASA FIRMS, Global Fishing
 Watch, plus maile do UCDP i airplanes.live. Lista i po co — `docs/SOURCES.md`.
 `.env` już istnieje z wylosowanym hasłem do bazy; klucze dopisz obok.
+**AISStream jest pilniejszy niż reszta**: kod źródła jest napisany i przetestowany (`aisstream.py`),
+czeka wyłącznie na klucz, a bez niego mapa nie pokazuje południowego Bałtyku wcale — zmierzone
+2026-09-29, zero pozycji w Zatoce Gdańskiej, przy polskim wybrzeżu, pod Kaliningradem i w cieśninach
+duńskich. Instrukcja zdobycia klucza: `docs/SOURCES.md`, sekcja „AISStream — południowy Bałtyk”.
 
 ## D2 - tory dyzurne w powietrzu (2026-09-27)
 

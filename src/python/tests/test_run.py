@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from wachta_detectors import aisstream
 from wachta_detectors import run as loop
 
 NOW = datetime(2026, 9, 22, 12, 30, tzinfo=timezone.utc)
@@ -43,6 +44,7 @@ class FakeRepo:
         self.coverage_hours: list[datetime] = []
         self.ship_fixes: list = []
         self.inserted_ships: list = []
+        self.covered_mmsi: set[str] = set()
         self.alert_rows: list = []
 
     def last_seen_since(self, conn, since):
@@ -84,6 +86,10 @@ class FakeRepo:
         self.inserted_ships.append((source_id, ships, fetched_at))
         return len(ships)
 
+    def mmsi_seen_since(self, conn, since, source_id):
+        self.since["mmsi_seen"] = (since, source_id)
+        return self.covered_mmsi
+
     def recent_ship_fixes(self, conn, since):
         self.since["ships"] = since
         return self.ship_fixes
@@ -92,6 +98,17 @@ class FakeRepo:
         rows = list(rows)
         self.alert_rows.extend(rows)
         return len(rows)
+
+
+class FakeAisReader:
+    """AISStream stand-in: the loop only ever asks it to drain, so that is all it does."""
+
+    def __init__(self, ships):
+        self._ships = list(ships)
+
+    def drain(self, now):
+        ships, self._ships = self._ships, []
+        return ships
 
 
 @pytest.fixture
@@ -383,6 +400,53 @@ class TestShipIngest:
         assert source_id == loop.SHIP_SOURCE_ID == "digitraffic-ais"
         assert ships == fake_ships
         assert fetched_at == NOW
+
+    def test_without_a_key_the_loop_ingests_exactly_as_before(self, fake, monkeypatch):
+        """No AISStream key is the repository's normal state - it must not add a source or a write."""
+        conn, repo = fake
+        monkeypatch.setattr(loop, "fetch_ships", lambda: [{"mmsi": "1", "ts": NOW, "lat": 60.0, "lon": 25.0}])
+        loop.run_ship_ingest(conn, NOW, None)
+        assert [s for s, _, _ in repo.inserted_ships] == ["digitraffic-ais"]
+
+    def test_the_southern_stream_is_written_as_its_own_source(self, fake, monkeypatch):
+        conn, repo = fake
+        monkeypatch.setattr(loop, "fetch_ships", lambda: [{"mmsi": "1", "ts": NOW, "lat": 60.0, "lon": 25.0}])
+        gdansk = {"mmsi": "261009000", "ts": NOW, "lat": 54.52, "lon": 18.55}
+        loop.run_ship_ingest(conn, NOW, FakeAisReader([gdansk]))
+        assert [s for s, _, _ in repo.inserted_ships] == ["digitraffic-ais", "aisstream-baltic-s"]
+        assert repo.inserted_ships[1][1] == [gdansk]
+
+    def test_digitraffic_written_before_the_overlap_is_computed(self, fake, monkeypatch):
+        """Order is the rule. Asking the database first would let this tick's Digitraffic snapshot
+        count as "not covered", and the crowd source would duplicate every hull for one cycle."""
+        conn, repo = fake
+        monkeypatch.setattr(loop, "fetch_ships", lambda: [])
+        kolejnosc = []
+        repo.insert_ship_positions = lambda c, source_id, ships, at: (
+            kolejnosc.append(f"zapis:{source_id}"), len(ships))[1]
+        repo.mmsi_seen_since = lambda c, since, source_id: (
+            kolejnosc.append("pytanie o pokrycie"), set())[1]
+        loop.run_ship_ingest(conn, NOW, FakeAisReader([]))
+        assert kolejnosc == ["zapis:digitraffic-ais", "pytanie o pokrycie", "zapis:aisstream-baltic-s"]
+
+    def test_a_hull_digitraffic_already_has_is_not_written_twice(self, fake, monkeypatch):
+        """Two sources for one MMSI manufacture impossible speeds between fixes - D7's own signature."""
+        conn, repo = fake
+        monkeypatch.setattr(loop, "fetch_ships", lambda: [])
+        repo.covered_mmsi = {"230982000"}
+        reader = FakeAisReader([{"mmsi": "230982000", "ts": NOW, "lat": 59.44, "lon": 24.75},
+                                {"mmsi": "261009000", "ts": NOW, "lat": 54.52, "lon": 18.55}])
+        loop.run_ship_ingest(conn, NOW, reader)
+        assert [s["mmsi"] for s in repo.inserted_ships[1][1]] == ["261009000"]
+
+    def test_the_overlap_question_is_asked_about_digitraffic_only(self, fake, monkeypatch):
+        """Scoped to the primary source, or the rule would suppress AISStream against its own rows."""
+        conn, repo = fake
+        monkeypatch.setattr(loop, "fetch_ships", lambda: [])
+        loop.run_ship_ingest(conn, NOW, FakeAisReader([]))
+        since, source_id = repo.since["mmsi_seen"]
+        assert source_id == "digitraffic-ais"
+        assert NOW - since == aisstream.PRIMARY_WINS_WINDOW
 
 
 class TestD4Wiring:

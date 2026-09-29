@@ -144,6 +144,20 @@ def insert_ship_positions(
     return len(ships)
 
 
+def mmsi_seen_since(conn: psycopg.Connection, since: datetime, source_id: str) -> set[str]:
+    """Which hulls one source has reported lately - the input to the two-source deduplication.
+
+    Scoped to a single source on purpose. Asking "who has been seen at all" would include the very
+    rows the second source just wrote, and the rule would start suppressing that source against
+    itself one tick after it started working.
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT mmsi FROM ship_position WHERE source_id = %s AND ts >= %s",
+        (source_id, since),
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def recent_ship_fixes(conn: psycopg.Connection, since: datetime) -> list[ShipFix]:
     """Ship positions since `since`, as ShipFix - the one shape both D4 and D6 consume."""
     rows = conn.execute(

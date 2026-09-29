@@ -17,6 +17,7 @@ from pathlib import Path
 
 import psycopg
 
+from wachta_detectors import aisstream
 from wachta_detectors import repository as repo
 from wachta_detectors.airports import load_airports
 from wachta_detectors.anchor import AnchorRules, by_ship, find_anchor_drag
@@ -209,11 +210,25 @@ def run_d1(conn, airports, now, rules: DarkRules = DarkRules(), config: RunnerCo
     log.info("D1: %d aircraft checked, %d silent, %d new alerts", len(last_seen), len(samples), n_alerts)
 
 
-def run_ship_ingest(conn, now) -> None:
-    """One Digitraffic snapshot in, with provenance - same shape as the aircraft ingestion pattern."""
+def run_ship_ingest(conn, now, ais_reader=None) -> None:
+    """Both AIS sources in, with provenance - the northern poll and the southern stream.
+
+    Order matters and is not cosmetic. Digitraffic is written first, and the deduplication then asks
+    the database which hulls IT has covered recently - so the snapshot just written counts. That is
+    what makes "the national network wins" true within the same tick rather than one tick late.
+    """
     ships = fetch_ships()
     n = repo.insert_ship_positions(conn, SHIP_SOURCE_ID, ships, now)
     log.info("statki: %d pozycji zapisanych (Digitraffic)", n)
+
+    if ais_reader is None:
+        return
+    southern = ais_reader.drain(now)
+    covered = repo.mmsi_seen_since(conn, now - aisstream.PRIMARY_WINS_WINDOW, SHIP_SOURCE_ID)
+    kept, dropped = aisstream.drop_covered(southern, covered)
+    m = repo.insert_ship_positions(conn, aisstream.SOURCE_ID, kept, now)
+    log.info("statki: %d pozycji zapisanych (AISStream), %d pominietych jako juz pokryte przez "
+             "Digitraffic w oknie %s", m, len(dropped), aisstream.PRIMARY_WINS_WINDOW)
 
 
 def _gap_evidence(a: GapAlert) -> dict:
@@ -434,12 +449,12 @@ def _guarded(name, detector, *args):
 
 
 def tick(conn, airports, now, progress, rules: DarkRules = DarkRules(), config: RunnerConfig = RunnerConfig(),
-         cable_index: LineIndex | None = None):
+         cable_index: LineIndex | None = None, ais_reader=None):
     _guarded("D1", run_d1, conn, airports, now, rules, config)
     _guarded("coverage", run_coverage, conn, now, progress, config)
 
     if progress.last_ships_fetch is None or now - progress.last_ships_fetch >= config.ships_every:
-        if _guarded("ships", run_ship_ingest, conn, now):
+        if _guarded("ships", run_ship_ingest, conn, now, ais_reader):
             progress.last_ships_fetch = now
 
     if progress.last_d4_run is None or now - progress.last_d4_run >= config.d4_every:
@@ -490,16 +505,20 @@ def main():
     cable_index = load_cable_index()
     config = RunnerConfig.from_env()
     rules = DarkRules()
-    log.info("runner: tick %ss, D3 co %s, okno danych D1 %s, kable dla D6: %s",
+    # Bez klucza zwraca None i loguje ostrzezenie - poludniowy Baltyk zostaje pusty, tak jak dzis,
+    # ale widac to w logu, zamiast wygladac na spokojne morze.
+    ais_reader = aisstream.reader_from_env(os.environ)
+    log.info("runner: tick %ss, D3 co %s, okno danych D1 %s, kable dla D6: %s, AISStream: %s",
              config.tick.total_seconds(), config.d3_every, d1_window(rules, config),
-             len(cable_index) if cable_index is not None else "brak")
+             len(cable_index) if cable_index is not None else "brak",
+             "tak" if ais_reader is not None else "nie")
     progress = Progress()
     while True:
         now = datetime.now(timezone.utc)
         try:
             # New connection each tick: a database restart must not silently kill the detectors forever.
             with psycopg.connect(os.environ["WACHTA_DB"], autocommit=True, connect_timeout=10) as conn:
-                tick(conn, airports, now, progress, rules, config, cable_index)
+                tick(conn, airports, now, progress, rules, config, cable_index, ais_reader)
         except Exception:
             # Nie tylko psycopg.Error: blad danych albo geometrii ma kosztowac jeden cykl, nie caly
             # proces. KeyboardInterrupt i SystemExit to BaseException, wiec nadal zatrzymuja petle.

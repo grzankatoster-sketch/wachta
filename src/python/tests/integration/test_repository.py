@@ -106,6 +106,39 @@ def test_ship_positions_are_written_with_provenance_and_read_back_as_shipfix(con
     assert source_id == "digitraffic-ais"
 
 
+def test_the_southern_source_is_registered_and_its_rows_pass_the_foreign_key(conn):
+    """ship_position.source_id references source(id), so an unregistered source cannot write at all.
+
+    Migration 0007 adds the row; without it every AISStream insert would fail on the constraint, and
+    the failure would only appear in production, on the day someone pastes a key.
+    """
+    ts = datetime(2026, 9, 29, 7, 0, tzinfo=timezone.utc)
+    tier = conn.execute("SELECT trust_tier FROM source WHERE id = 'aisstream-baltic-s'").fetchone()
+    assert tier == (3,), "AISStream ma byc o stopien mniej ufane niz Digitraffic (2)"
+    n = repo.insert_ship_positions(conn, "aisstream-baltic-s", [
+        {"mmsi": "261009000", "ts": ts, "lat": 54.5231, "lon": 18.5519, "sog": 11.4, "cog": 87.3,
+         "name": "KAPITAN POINC", "imo": "9105254", "ship_type": "70", "nav_status": "0"}], ts)
+    assert n == 1
+    assert conn.execute(
+        "SELECT count(*) FROM ship_position WHERE source_id = 'aisstream-baltic-s' AND lat < 57"
+    ).fetchone() == (1,)
+
+
+def test_the_overlap_question_counts_only_the_source_it_was_asked_about(conn):
+    """mmsi_seen_since underpins the deduplication; scoped wrongly it would suppress AISStream itself."""
+    ts = datetime(2026, 9, 29, 10, 0, tzinfo=timezone.utc)
+    repo.insert_ship_positions(conn, "digitraffic-ais",
+                               [{"mmsi": "230777001", "ts": ts, "lat": 60.0, "lon": 25.0}], ts)
+    repo.insert_ship_positions(conn, "aisstream-baltic-s",
+                               [{"mmsi": "261777002", "ts": ts, "lat": 54.5, "lon": 18.5}], ts)
+    since = ts - timedelta(minutes=15)
+    fintraffic = repo.mmsi_seen_since(conn, since, "digitraffic-ais")
+    assert "230777001" in fintraffic
+    assert "261777002" not in fintraffic          # wlasnych wierszy AISStream nie liczymy
+    assert "261777002" in repo.mmsi_seen_since(conn, since, "aisstream-baltic-s")
+    assert repo.mmsi_seen_since(conn, ts + timedelta(minutes=1), "digitraffic-ais") == set()
+
+
 def test_recent_ship_fixes_excludes_positions_before_since(conn):
     old = datetime(2026, 9, 20, 0, 0, tzinfo=timezone.utc)
     new = datetime(2026, 9, 27, 9, 0, tzinfo=timezone.utc)

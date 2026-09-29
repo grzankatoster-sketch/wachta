@@ -74,6 +74,10 @@ pokazuje [`.env.example`](../.env.example):
 - `AISSTREAM_API_KEY`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `FIRMS_MAP_KEY`, `GFW_TOKEN` —
   opcjonalne klucze źródeł, opisane w [docs/SOURCES.md](SOURCES.md). Stos startuje i działa bez nich;
   usługa `ingestion` korzysta wyłącznie z adsb.lol, które klucza nie wymaga.
+  **`AISSTREAM_API_KEY` zmienia to, co widać na mapie**: bez niego AIS kończy się na wodach fińskich
+  (zmierzone: 0 statków w Zatoce Gdańskiej, przy polskim wybrzeżu, pod Kaliningradem i w cieśninach
+  duńskich), z nim dochodzi południowy Bałtyk. Jak zdobyć klucz — [docs/SOURCES.md](SOURCES.md),
+  sekcja „AISStream — południowy Bałtyk”.
 
 `.env` jest w `.gitignore` i nie trafia do repozytorium.
 
