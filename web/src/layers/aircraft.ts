@@ -1,10 +1,27 @@
-import { LineLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { IconLayer, LineLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import type { LiveAircraft } from "../api";
-import { LABEL, aircraftColor } from "../colors";
+import { LABEL } from "../colors";
+import { KATEGORIE, kategoriaSamolotu } from "../typy";
+import { GRUBOSC_OBWODKI, OBWODKA, ikona, kat } from "./ikony";
 
-/** Two minutes ahead on the present heading - the same reading the ship layer gives, so one glance
- * answers "which way is this going" for both domains. */
+/**
+ * Aircraft, drawn the same way as ships: a silhouette pointing where it is going.
+ *
+ * The shape says fixed-wing or rotorcraft and the colour says what the type designator implies -
+ * surveillance, tanker, transport, fighter, or nothing in particular. That last one matters: an
+ * airframe the table does not recognise stays plain "military" rather than being pushed into the
+ * nearest box. The classification is a heuristic over ICAO type codes and is labelled as one on the
+ * legend, because a model is not a mission.
+ *
+ * An aircraft too slow to have a meaningful track, or reporting none, is a dot. Turning a silhouette
+ * to a heading we do not have would be drawing a fact we do not hold.
+ */
+
+/** Below this there is no useful track - the aircraft is taxiing, hovering or the field is absent. */
+const MIN_Z_KURSEM_KT = 40;
+
+/** Two minutes ahead, the same reading the ship layer gives at its own horizon. */
 function przedDziobem(a: LiveAircraft): [number, number] {
   const km = ((a.gsKt ?? 0) * 1.852 * 2) / 60;
   const kurs = ((a.trackDeg ?? 0) * Math.PI) / 180;
@@ -14,37 +31,65 @@ function przedDziobem(a: LiveAircraft): [number, number] {
   ];
 }
 
+export function zKursem(a: LiveAircraft): boolean {
+  return (a.gsKt ?? 0) > MIN_Z_KURSEM_KT && a.trackDeg !== null && a.trackDeg !== undefined;
+}
+
+const kolor = (a: LiveAircraft) => KATEGORIE[kategoriaSamolotu(a)].kolor;
+const rozmiar = (a: LiveAircraft) => KATEGORIE[kategoriaSamolotu(a)].rozmiar;
+
 export function aircraftLayers(data: LiveAircraft[]): Layer[] {
   const airborne = data.filter((a) => !a.onGround);
-  const zKursem = airborne.filter((a) => (a.gsKt ?? 0) > 40 && a.trackDeg !== null);
+  const lecace = airborne.filter(zKursem);
+  const bezKursu = airborne.filter((a) => !zKursem(a));
+  const przejscie = { getPosition: 900, getSourcePosition: 900, getTargetPosition: 900 };
+
   return [
     new LineLayer<LiveAircraft>({
       id: "aircraft-course",
-      data: zKursem,
+      data: lecace,
       getSourcePosition: (a) => [a.lon, a.lat],
       getTargetPosition: przedDziobem,
-      getColor: (a) => [...aircraftColor(a), 130] as [number, number, number, number],
+      getColor: (a) => [...kolor(a), 130] as [number, number, number, number],
       getWidth: 1.2,
       widthUnits: "pixels",
-      transitions: { getSourcePosition: 900, getTargetPosition: 900 },
+      transitions: przejscie,
     }),
     new ScatterplotLayer<LiveAircraft>({
-      id: "aircraft",
-      data: airborne,
+      id: "aircraft-stopped",
+      data: bezKursu,
       getPosition: (a) => [a.lon, a.lat],
-      getFillColor: (a) => aircraftColor(a),
-      getRadius: (a) => (a.isMilitary ? 6 : 3),
+      getFillColor: kolor,
+      getRadius: (a) => rozmiar(a) / 5,
       radiusUnits: "pixels",
-      // Obwodka, bo samo wypelnienie nie wystarczy: czerwony wojskowy ma 2.46:1 wzgledem wody,
-      // czyli ponizej progu 3:1. Ciemny obrys ma 10.55:1 na wodzie i 16.03:1 na ladzie, wiec
-      // znacznik jest widoczny niezaleznie od tego, na czym wyladuje. Rozroznienie wojskowy/cywilny
-      // nie opiera sie na kolorze - promien jest dwa razy wiekszy, a maszyna ma podpis.
       stroked: true,
-      getLineColor: LABEL,
-      lineWidthMinPixels: 1,
+      getLineColor: OBWODKA,
+      lineWidthMinPixels: 0.9,
       pickable: true,
-      // Pozycje przychodza skokowo co 5 s. Bez przejscia mapa mruga jak odswiezany obrazek.
-      transitions: { getPosition: 900 },
+      transitions: przejscie,
+    }),
+    new IconLayer<LiveAircraft>({
+      id: "aircraft-obwodka",
+      data: lecace,
+      getPosition: (a) => [a.lon, a.lat],
+      getIcon: (a) => ikona(KATEGORIE[kategoriaSamolotu(a)].ksztalt),
+      getSize: (a) => rozmiar(a) + GRUBOSC_OBWODKI,
+      getAngle: (a) => kat(a.trackDeg),
+      getColor: OBWODKA,
+      sizeUnits: "pixels",
+      transitions: przejscie,
+    }),
+    new IconLayer<LiveAircraft>({
+      id: "aircraft",
+      data: lecace,
+      getPosition: (a) => [a.lon, a.lat],
+      getIcon: (a) => ikona(KATEGORIE[kategoriaSamolotu(a)].ksztalt),
+      getSize: rozmiar,
+      getAngle: (a) => kat(a.trackDeg),
+      getColor: kolor,
+      sizeUnits: "pixels",
+      pickable: true,
+      transitions: przejscie,
     }),
     new TextLayer<LiveAircraft>({
       id: "aircraft-labels",
@@ -54,8 +99,8 @@ export function aircraftLayers(data: LiveAircraft[]): Layer[] {
       getSize: 11,
       // Podklad positron jest jasny - bialy napis byl na nim niewidoczny mimo poprawnego renderu.
       getColor: LABEL,
-      getPixelOffset: [0, -14],
-      transitions: { getPosition: 900 },
+      getPixelOffset: [0, -16],
+      transitions: przejscie,
     }),
   ];
 }

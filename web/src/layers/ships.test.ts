@@ -32,11 +32,27 @@ describe("statki na mapie", () => {
     expect(lonN).toBeCloseTo(25.0, 3);
   });
 
-  it("linie rysuja sie tylko dla plynacych, znaczniki dla wszystkich", () => {
+  it("plynacy dostaje sylwetke i linie, stojacy sama kropke", () => {
+    // Stojacy statek nie ma sensownego kursu - AIS podaje ostatni albo zero - wiec obrocona
+    // sylwetka bylaby wymyslonym faktem. Kropka mowi "tu, i nigdzie nie plynie", czyli dokladnie
+    // to, na co patrza detektory kotwicy i przeladunku.
     const dane = [statek({}), statek({ mmsi: "2", sogKt: 0 })];
-    const linie = shipLayers(dane).find((l) => l.id === "ship-course");
-    const znaczniki = shipLayers(dane).find((l) => l.id === "ships");
-    expect((linie!.props.data as LiveShip[]).length).toBe(1);
-    expect((znaczniki!.props.data as LiveShip[]).length).toBe(2);
+    const w = shipLayers(dane);
+    const ile = (id: string) => (w.find((l) => l.id === id)!.props.data as LiveShip[]).length;
+
+    expect(ile("ship-course")).toBe(1);
+    expect(ile("ships")).toBe(1);
+    expect(ile("ships-stopped")).toBe(1);
+    expect(ile("ships-obwodka")).toBe(1);
+  });
+
+  it("sylwetka jest obrocona na kurs, a obwodka na ten sam", () => {
+    // Kat w deck.gl idzie przeciwnie do wskazowek zegara, namiar kompasowy zgodnie. Pomylka tutaj
+    // daje mape, na ktorej wszystko plynie w zla strone i nadal wyglada wiarygodnie.
+    const w = shipLayers([statek({ cogDeg: 135 })]);
+    const katFn = (id: string) =>
+      (w.find((l) => l.id === id)!.props as unknown as { getAngle: (s: LiveShip) => number }).getAngle;
+    expect(katFn("ships")(statek({ cogDeg: 135 }))).toBe(-135);
+    expect(katFn("ships-obwodka")(statek({ cogDeg: 135 }))).toBe(-135);
   });
 });

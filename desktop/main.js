@@ -200,10 +200,27 @@ function utworzOkno() {
 }
 
 async function startuj() {
-  if (await wstan()) {
-    await chwila(400);          // zeby ostatni krok zdazyl sie pokazac jako zrobiony
-    okno.loadURL(ADRES);
+  if (!(await wstan())) return;
+  await chwila(400);            // zeby ostatni krok zdazyl sie pokazac jako zrobiony
+
+  // Pamiec podreczna czyszczona przy kazdym starcie.
+  //
+  // Okno jest powloka wokol aplikacji, ktora przebudowuje sie po kilka razy dziennie. Vite hashuje
+  // nazwy plikow, wiec stary index.html w cache wskazuje na pliki, ktorych juz nie ma - albo, gorzej,
+  // pokazuje poprzednia wersje i wyglada to jak blad w aplikacji, a nie jak nieaktualny cache.
+  // Tak wlasnie zniknely statki: przegladarka miala je, okno pokazywalo wersje sprzed ich dodania.
+  // Aplikacja jest lokalna, wiec czyszczenie nic nie kosztuje.
+  try {
+    await okno.webContents.session.clearCache();
+  } catch (e) {
+    console.warn("Nie udalo sie wyczyscic pamieci podrecznej:", String(e).slice(0, 120));
   }
+
+  // Naglowki skladane z tablicy, a nie wpisane w jeden literal: extraHeaders rozdziela je znakiem
+  // nowej linii, a nowa linia wpisana wprost w napis rozbija plik. Raz juz rozbila.
+  const bezCache = ["pragma: no-cache", "Cache-Control: no-cache"].join("\n") + "\n";
+  await okno.loadURL(ADRES, { extraHeaders: bezCache });
+  console.log(`[wachta] widok: zaladowany - ${ADRES}`);
 }
 
 // Sterownik grafiki, wybrany pomiarem, nie domyslem.

@@ -1,3 +1,5 @@
+import { Klucz } from "./Klucz";
+import type { Kategoria } from "../typy";
 import { NAZWY_GRUP, opisObszaru, przelacz, wGrupie, wszystkoWylaczone,
   type Grupa, type IdWarstwy, type Widoczne } from "../warstwy";
 
@@ -13,10 +15,13 @@ export function Warstwy({
   widoczne,
   onZmiana,
   liczby,
+  kategorie,
 }: {
   widoczne: Widoczne;
   onZmiana: (w: Widoczne) => void;
   liczby: Record<IdWarstwy, number>;
+  /** Categories actually on screen, per domain - the key below each group's switches. */
+  kategorie?: Partial<Record<Grupa, Array<{ id: Kategoria; ile: number }>>>;
 }) {
   return (
     <section className="warstwy" aria-label="Co widać na mapie">
@@ -48,6 +53,7 @@ ${wlaczona ? "Kliknij, żeby ukryć" : "Kliknij, żeby pokazać"}`}
               );
             })}
           </ul>
+          <Klucz kategorie={kategorie?.[grupa] ?? []} />
         </div>
       ))}
       {wszystkoWylaczone(widoczne) && (

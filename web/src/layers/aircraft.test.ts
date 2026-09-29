@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aircraftLayers } from "./aircraft";
+import { aircraftLayers, zKursem } from "./aircraft";
+import { KATEGORIE } from "../typy";
 import { BASEMAP_LAND, BASEMAP_SEA, GREY, LABEL, contrastRatio } from "../colors";
 import type { LiveAircraft } from "../api";
 
@@ -41,13 +42,31 @@ describe("widocznosc znacznikow na podkladzie", () => {
 
   it("wojskowy i cywilny roznia sie czyms wiecej niz kolorem", () => {
     // Czerwony i szary maja zblizona jasnosc, wiec przy daltonizmie kolor nie wystarcza.
-    // Rozmiar niesie te sama informacje: promien wojskowego jest dwukrotnie wiekszy.
-    // Po identyfikatorze, nie po pozycji: pierwsza warstwa to teraz linia kursu, a nie znaczniki.
-    const warstwa = aircraftLayers([plane({ isMilitary: true }), plane({ hex: "bbb", isMilitary: false })])
-      .find((l) => l.id === "aircraft");
-    expect(warstwa, "warstwa znacznikow").toBeDefined();
-    const promien = (warstwa!.props as unknown as { getRadius: (a: LiveAircraft) => number }).getRadius;
-    expect(promien(plane({ isMilitary: true }))).toBeGreaterThanOrEqual(
-      2 * promien(plane({ isMilitary: false })));
+    // Rozmiar niesie te sama informacje: kazda kategoria wojskowa rysuje sie wieksza od cywilnej.
+    expect(KATEGORIE.wojskowy.rozmiar).toBeGreaterThan(KATEGORIE.cywilny.rozmiar);
+    expect(KATEGORIE.rozpoznanie.rozmiar).toBeGreaterThan(KATEGORIE.cywilny.rozmiar);
+  });
+
+  it("smiglowiec rysuje sie innym ksztaltem niz samolot", () => {
+    // Ksztalt to jedyny sygnal, ktory dziala bez koloru i bez porownywania rozmiarow obok siebie.
+    expect(KATEGORIE.smiglowiec.ksztalt).toBe("smiglowiec");
+    expect(KATEGORIE.mysliwiec.ksztalt).toBe("samolot");
+    expect(KATEGORIE.tankowiec.ksztalt).toBe("statek");
+  });
+
+  it("maszyna bez kursu jest kropka, a nie sylwetka wskazujaca polnoc", () => {
+    // Obrocenie sylwetki na kurs, ktorego nie znamy, to narysowanie faktu, ktorego nie mamy.
+    expect(zKursem(plane({ gsKt: 420, trackDeg: 90 }))).toBe(true);
+    expect(zKursem(plane({ gsKt: 5, trackDeg: 90 }))).toBe(false);
+    expect(zKursem(plane({ gsKt: 420, trackDeg: null }))).toBe(false);
+
+    const warstwy = aircraftLayers([
+      plane({ gsKt: 420, trackDeg: 90 }),
+      plane({ hex: "bbb", gsKt: 0, trackDeg: null }),
+    ]);
+    const ile = (id: string) =>
+      (warstwy.find((l) => l.id === id)!.props as unknown as { data: LiveAircraft[] }).data.length;
+    expect(ile("aircraft")).toBe(1);
+    expect(ile("aircraft-stopped")).toBe(1);
   });
 });

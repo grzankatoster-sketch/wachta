@@ -1,6 +1,7 @@
 import type { AlertDto, JammingDto, LiveAircraft, LiveShip } from "./api";
 import { parseEvidence } from "./api";
 import { NAZWY, dopisek, podmiot, szczegoly } from "./alert-text";
+import { ocen, type Ocena } from "./ocena";
 
 /**
  * Turns one clicked map object into the three sections the detail panel shows: what it is, what it
@@ -34,6 +35,8 @@ export interface Szczegoly {
   naPodstawie: string[];
   /** Punkty zaniku/powrotu, jesli dostepne w evidence (D4/D6) - do narysowania toru. */
   tor: { zanik: Punkt; powrot: Punkt } | null;
+  /** Wlasna ocena alarmu: werdykt, za, przeciw. Null dla obiektow, ktore nie sa alarmem. */
+  ocena?: Ocena | null;
 }
 
 function liczba(v: unknown): number | null {
@@ -350,6 +353,7 @@ function alertDetail(a: AlertDto): Szczegoly {
       `Wynik: ${a.score}`,
       ...base.coToJest,
     ],
+    ocena: ocen(a.detector, ev),
   };
 }
 

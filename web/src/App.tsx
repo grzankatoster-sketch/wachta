@@ -14,6 +14,7 @@ import { alertsLayer } from "./layers/alerts";
 import { jammingLayer } from "./layers/jamming";
 import { tripsLayer } from "./layers/trips";
 import { isCargo } from "./colors";
+import { kategoriaSamolotu, kategoriaStatku, obecne } from "./typy";
 import { useLive } from "./live";
 import { replayBounds, toTrips, type Trip } from "./replay";
 import { selectionFromPicked, zbudujSzczegoly, type Selection } from "./detail";
@@ -89,6 +90,13 @@ export default function App() {
     zaklocenia: jamming.length,
   };
 
+  // Klucz wypisuje tylko to, co naprawde jest na ekranie - i liczy z DANYCH WIDOCZNYCH, nie ze
+  // wszystkich, zeby wylaczenie warstwy znikalo takze z klucza.
+  const kategorie = {
+    powietrze: obecne(widoczneSamoloty.filter((a) => !a.onGround).map(kategoriaSamolotu)),
+    morze: obecne(widoczneStatki.map(kategoriaStatku)),
+  };
+
   const layers = replay
     ? [jammingLayer(widoczneZaklocenia), tripsLayer(replay.trips, currentTime), alertsLayer(widoczneAlarmy)]
     : [
@@ -128,7 +136,7 @@ export default function App() {
           </span>
         </p>
         </header>
-        <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
+        <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} kategorie={kategorie} />
         <AlertsPanel
           alerts={alerts}
           polaczone={connected}
