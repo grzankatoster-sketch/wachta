@@ -1,0 +1,21 @@
+{
+  "name": "wachta-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WACHTA jako okno pulpitu: podnosi stos, pokazuje postep, otwiera mape.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "pl.wachta.desktop",
+    "productName": "WACHTA",
+    "files": ["main.js", "preload.js", "status.html", "ikona.png"],
+    "win": { "target": "nsis", "icon": "ikona.png" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
