@@ -25,6 +25,11 @@ public sealed class ApiTests : IAsyncLifetime
         await conn.OpenAsync();
         await using var cmd = new NpgsqlCommand("""
             DELETE FROM aircraft_position WHERE hex IN ('api001','api002','api003','api004');
+            DELETE FROM ship_position WHERE mmsi IN ('999000001','999000002','999000003');
+            INSERT INTO ship_position (ts, mmsi, name, ship_type, nav_status, lat, lon, sog_kt, cog_deg, source_id, fetched_at) VALUES
+              (now() - interval '3 minutes',  '999000001', 'TEST CARGO', '70', '0', 60.0, 25.0, 12.0,  90, 'digitraffic-ais', now()),
+              (now() - interval '20 minutes', '999000002', 'TEST MOORED','52', '5', 60.1, 25.1,  0.0,   0, 'digitraffic-ais', now()),
+              (now() - interval '3 minutes',  '999000003', 'TEST FAR',   '70', '0', 33.9,-118.4, 9.0,  10, 'digitraffic-ais', now());
             INSERT INTO aircraft_position (ts, hex, flight, type_code, is_military, lat, lon, alt_baro_ft, on_ground, gs_kt, track_deg, nic, nac_p, source_id, fetched_at) VALUES
               (now() - interval '90 seconds', 'api001', 'OLD1', 'K35R', true,  55.0, 19.0, 25000, false, 400, 90, 8, 9, 'adsblol-mil', now()),
               (now() - interval '10 seconds', 'api001', 'NEW1', 'K35R', true,  55.1, 19.2, 25000, false, 400, 90, 8, 9, 'adsblol-mil', now()),
@@ -76,6 +81,27 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.Contains(live, a => a.Hex == "api001");   // wojskowy W obszarze zostaje
         Assert.Contains(live, a => a.Hex == "api002");   // cywilny tez
         Assert.All(live, a => Assert.True(LiveBroadcaster.Area.Contains(a.Lat, a.Lon), $"{a.Hex} poza obszarem"));
+    }
+
+    [DockerFact]
+    public async Task Ships_are_broadcast_and_a_moored_one_is_not_dropped_by_the_window()
+    {
+        // Osiemset statkow siedzialo w bazie i nie bylo ich na mapie, bo nie bylo czym ich wyslac.
+        // Okno 30 minut, a nie 2 jak przy samolotach: statek na kotwicy nadaje co kilka minut, wiec
+        // krotkie okno po cichu gubiloby wlasnie te jednostki, ktorymi zajmuja sie D5 i D6.
+        await using var conn = new NpgsqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        var statki = await LiveBroadcaster.CurrentShips(conn);
+
+        Assert.Contains(statki, s => s.Mmsi == "999000001");
+        Assert.Contains(statki, s => s.Mmsi == "999000002");   // zacumowany sprzed 20 minut zostaje
+        Assert.DoesNotContain(statki, s => s.Mmsi == "999000003");  // spoza obszaru odpada
+        Assert.All(statki, s => Assert.True(LiveBroadcaster.Area.Contains(s.Lat, s.Lon)));
+
+        var cargo = Assert.Single(statki, s => s.Mmsi == "999000001");
+        Assert.Equal("TEST CARGO", cargo.Name);
+        Assert.Equal("70", cargo.ShipType);
+        Assert.Equal(90, cargo.CogDeg);
     }
 
     [DockerFact]

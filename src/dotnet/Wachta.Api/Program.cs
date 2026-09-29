@@ -13,6 +13,7 @@ var app = builder.Build();
 
 app.MapOpenApi();
 app.MapAircraftEndpoints();
+app.MapShipEndpoints();
 app.MapDetectorEndpoints();
 app.MapSearchEndpoints();
 app.MapHub<LiveHub>("/hubs/live");

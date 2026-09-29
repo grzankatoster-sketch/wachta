@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
-import type { AlertDto, LiveAircraft } from "./api";
+import type { AlertDto, LiveAircraft, LiveShip } from "./api";
 
 export function useLive() {
   const [aircraft, setAircraft] = useState<LiveAircraft[]>([]);
+  const [ships, setShips] = useState<LiveShip[]>([]);
   const [alerts, setAlerts] = useState<AlertDto[]>([]);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     const hub = new HubConnectionBuilder().withUrl("/hubs/live").withAutomaticReconnect().configureLogging(LogLevel.Warning).build();
     hub.on("aircraft", (list: LiveAircraft[]) => setAircraft(list));
+    hub.on("ships", (list: LiveShip[]) => setShips(list));
     hub.on("alerts", (list: AlertDto[]) => setAlerts((prev) => [...list, ...prev].slice(0, 200)));
     hub.onreconnecting(() => setConnected(false));
     hub.onreconnected(() => setConnected(true));
@@ -27,5 +29,5 @@ export function useLive() {
     };
   }, []);
 
-  return { aircraft, alerts, setAlerts, connected };
+  return { aircraft, ships, alerts, setAlerts, connected };
 }

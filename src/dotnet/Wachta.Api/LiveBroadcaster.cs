@@ -16,6 +16,10 @@ public sealed class LiveBroadcaster(NpgsqlDataSource db, IHubContext<LiveHub> hu
         SELECT * FROM ({AircraftEndpoints.LiveSql}) live
         """;
 
+    private const string ShipsSql = $"""
+        SELECT * FROM ({ShipEndpoints.LiveSql}) statki
+        """;
+
     private DateTime _alertsSince = DateTime.UtcNow;
 
     /// <summary>
@@ -30,6 +34,16 @@ public sealed class LiveBroadcaster(NpgsqlDataSource db, IHubContext<LiveHub> hu
     /// serves military traffic worldwide, so every tick carried around three hundred aircraft from
     /// other continents.
     /// </summary>
+    /// <summary>Ships in the same area, on the same tick. Eight hundred hulls that the map used
+    /// to collect and never draw - see ShipEndpoints for why the window is half an hour.</summary>
+    public static async Task<List<LiveShip>> CurrentShips(System.Data.Common.DbConnection conn) =>
+        (await conn.QueryAsync<LiveShip>(ShipsSql,
+            new
+            {
+                minLat = (double?)Area.MinLat, minLon = (double?)Area.MinLon,
+                maxLat = (double?)Area.MaxLat, maxLon = (double?)Area.MaxLon,
+            })).ToList();
+
     public static async Task<List<LiveAircraft>> CurrentAircraft(System.Data.Common.DbConnection conn) =>
         (await conn.QueryAsync<LiveAircraft>(BroadcastSql,
             new
@@ -49,6 +63,7 @@ public sealed class LiveBroadcaster(NpgsqlDataSource db, IHubContext<LiveHub> hu
                 await using var conn = await db.OpenConnectionAsync(ct);
 
                 await hub.Clients.All.SendAsync("aircraft", await CurrentAircraft(conn), ct);
+                await hub.Clients.All.SendAsync("ships", await CurrentShips(conn), ct);
 
                 var tickStart = DateTime.UtcNow;
                 var alerts = (await conn.QueryAsync<AlertDto>(DetectorEndpoints.AlertsSql, new { since = _alertsSince })).ToList();

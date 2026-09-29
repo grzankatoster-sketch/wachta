@@ -37,6 +37,33 @@ export function contrastRatio(a: [number, number, number], b: [number, number, n
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/**
+ * Ships, in a cool family so that the sea does not borrow the air's colours.
+ *
+ * Two classes, not six. AIS knows two dozen ship types and naming them all on a legend would cost
+ * the reader more than it tells: the split that matters here is the one the detectors care about -
+ * hulls that carry something (cargo 70-79, tanker 80-89) against everything else, the tugs, pilots,
+ * ferries and fishing boats that make up most of the traffic and most of the false alarms.
+ *
+ * Measured against the positron basemap: cargo 6.53:1 on land and 4.30:1 on water, other vessels
+ * 5.71:1 and 3.76:1, both clear of the 3:1 WCAG asks of a meaningful graphic. They differ in hue
+ * rather than lightness, because on a light basemap every mark has to be dark and there is no room
+ * left to separate them by brightness - so size carries the same split a second time: cargo draws
+ * larger. The exact type is named in words in the detail panel, where it cannot be misread at all.
+ */
+export const SHIP_CARGO: [number, number, number] = [11, 94, 120];
+export const SHIP_OTHER: [number, number, number] = [70, 98, 125];
+
+/** AIS type codes 70-89 carry freight; the rest work the port or fish. Unknown counts as "other". */
+export function isCargo(shipType: string | null | undefined): boolean {
+  const n = Number(shipType);
+  return Number.isFinite(n) && n >= 70 && n <= 89;
+}
+
+export function shipColor(shipType: string | null | undefined): [number, number, number] {
+  return isCargo(shipType) ? SHIP_CARGO : SHIP_OTHER;
+}
+
 export function aircraftColor(a: LiveAircraft): [number, number, number] {
   return a.isMilitary ? RED : GREY;
 }

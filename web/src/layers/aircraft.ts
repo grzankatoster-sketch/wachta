@@ -1,11 +1,33 @@
-import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { LineLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import type { LiveAircraft } from "../api";
 import { LABEL, aircraftColor } from "../colors";
 
+/** Two minutes ahead on the present heading - the same reading the ship layer gives, so one glance
+ * answers "which way is this going" for both domains. */
+function przedDziobem(a: LiveAircraft): [number, number] {
+  const km = ((a.gsKt ?? 0) * 1.852 * 2) / 60;
+  const kurs = ((a.trackDeg ?? 0) * Math.PI) / 180;
+  return [
+    a.lon + (km / (111.32 * Math.cos((a.lat * Math.PI) / 180) || 1)) * Math.sin(kurs),
+    a.lat + (km / 111.32) * Math.cos(kurs),
+  ];
+}
+
 export function aircraftLayers(data: LiveAircraft[]): Layer[] {
   const airborne = data.filter((a) => !a.onGround);
+  const zKursem = airborne.filter((a) => (a.gsKt ?? 0) > 40 && a.trackDeg !== null);
   return [
+    new LineLayer<LiveAircraft>({
+      id: "aircraft-course",
+      data: zKursem,
+      getSourcePosition: (a) => [a.lon, a.lat],
+      getTargetPosition: przedDziobem,
+      getColor: (a) => [...aircraftColor(a), 130] as [number, number, number, number],
+      getWidth: 1.2,
+      widthUnits: "pixels",
+      transitions: { getSourcePosition: 900, getTargetPosition: 900 },
+    }),
     new ScatterplotLayer<LiveAircraft>({
       id: "aircraft",
       data: airborne,
@@ -21,6 +43,8 @@ export function aircraftLayers(data: LiveAircraft[]): Layer[] {
       getLineColor: LABEL,
       lineWidthMinPixels: 1,
       pickable: true,
+      // Pozycje przychodza skokowo co 5 s. Bez przejscia mapa mruga jak odswiezany obrazek.
+      transitions: { getPosition: 900 },
     }),
     new TextLayer<LiveAircraft>({
       id: "aircraft-labels",
@@ -31,6 +55,7 @@ export function aircraftLayers(data: LiveAircraft[]): Layer[] {
       // Podklad positron jest jasny - bialy napis byl na nim niewidoczny mimo poprawnego renderu.
       getColor: LABEL,
       getPixelOffset: [0, -14],
+      transitions: { getPosition: 900 },
     }),
   ];
 }

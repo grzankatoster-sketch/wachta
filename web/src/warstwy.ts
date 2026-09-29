@@ -1,4 +1,4 @@
-import { GREY, RED } from "./colors";
+import { GREY, RED, SHIP_CARGO, SHIP_OTHER } from "./colors";
 
 /**
  * What is on the map, in words, together with the switch that isolates it.
@@ -9,10 +9,27 @@ import { GREY, RED } from "./colors";
  * the first person to open it said "some dots, nothing is clickable, I have no idea what this is".
  */
 
-export type IdWarstwy = "wojskowe" | "cywilne" | "alarmy" | "zaklocenia";
+export type IdWarstwy = "wojskowe" | "cywilne" | "ladunek" | "statki" | "alarmy" | "zaklocenia";
+
+/**
+ * Legend headings.
+ *
+ * Six rows in one list read as six unrelated things. Grouped by domain they read as what they are:
+ * what is in the air, what is on the water, and what the project's own rules made of it. The third
+ * group is deliberately last and deliberately named after the detectors - everything in it is this
+ * project's opinion, everything above it is somebody else's measurement.
+ */
+export type Grupa = "powietrze" | "morze" | "detektory";
+
+export const NAZWY_GRUP: Record<Grupa, string> = {
+  powietrze: "W powietrzu",
+  morze: "Na morzu",
+  detektory: "Co znalazły detektory",
+};
 
 export interface OpisWarstwy {
   id: IdWarstwy;
+  grupa: Grupa;
   nazwa: string;
   /** One sentence: what the mark means, not what it is called. */
   opis: string;
@@ -25,6 +42,7 @@ const rgb = ([r, g, b]: [number, number, number]) => `rgb(${r},${g},${b})`;
 export const WARSTWY: OpisWarstwy[] = [
   {
     id: "wojskowe",
+    grupa: "powietrze",
     nazwa: "Samoloty wojskowe",
     opis: "Oznaczone jako wojskowe przez adsb.lol, ograniczone do obserwowanego obszaru. Wiele maszyn nie nadaje ADS-B wcale — widać tylko te, które nadają.",
     kolor: rgb(RED),
@@ -32,13 +50,31 @@ export const WARSTWY: OpisWarstwy[] = [
   },
   {
     id: "cywilne",
+    grupa: "powietrze",
     nazwa: "Samoloty cywilne",
     opis: "Reszta ruchu w zasięgu odbiorników. Służy za tło: to na ich tle widać, że gdzieś robi się pusto.",
     kolor: rgb(GREY),
     ksztalt: "kropka",
   },
   {
+    id: "ladunek",
+    grupa: "morze",
+    nazwa: "Statki z ładunkiem",
+    opis: "Masowce i tankowce (kod AIS 70–89). Linia przed dziobem pokazuje, dokąd statek dopłynie w pół godziny obecnym kursem — jej długość to prędkość. Stojący nie ma linii.",
+    kolor: rgb(SHIP_CARGO),
+    ksztalt: "kropka",
+  },
+  {
+    id: "statki",
+    grupa: "morze",
+    nazwa: "Pozostałe jednostki",
+    opis: "Holowniki, pilotówki, promy, kutry. Większość ruchu i większość fałszywych alarmów — dlatego są osobno.",
+    kolor: rgb(SHIP_OTHER),
+    ksztalt: "kropka",
+  },
+  {
     id: "alarmy",
+    grupa: "detektory",
     nazwa: "Alarmy detektorów",
     opis: "Miejsca, które detektory uznały za warte sprawdzenia. Kandydat do sprawdzenia, nigdy wyrok.",
     kolor: "rgb(255,190,0)",
@@ -46,6 +82,7 @@ export const WARSTWY: OpisWarstwy[] = [
   },
   {
     id: "zaklocenia",
+    grupa: "detektory",
     nazwa: "Zakłócenia GPS",
     opis: "Udział samolotów zgłaszających obniżoną dokładność nawigacji. Bursztyn 2–10%, czerwony powyżej 10%.",
     kolor: "rgb(230,57,70)",
@@ -65,9 +102,16 @@ export type Widoczne = Record<IdWarstwy, boolean>;
 export const WSZYSTKO_WIDOCZNE: Widoczne = {
   wojskowe: true,
   cywilne: true,
+  ladunek: true,
+  statki: true,
   alarmy: true,
   zaklocenia: true,
 };
+
+/** The descriptors of one group, in the order they are declared. */
+export function wGrupie(grupa: Grupa): OpisWarstwy[] {
+  return WARSTWY.filter((w) => w.grupa === grupa);
+}
 
 export function przelacz(stan: Widoczne, id: IdWarstwy): Widoczne {
   return { ...stan, [id]: !stan[id] };
@@ -84,10 +128,9 @@ export function wszystkoWylaczone(stan: Widoczne): boolean {
 }
 
 /** How many marks a layer currently contributes, for the counter next to its name. */
-export function policz(
-  id: IdWarstwy,
-  liczby: { wojskowe: number; cywilne: number; alarmy: number; zaklocenia: number },
-): number {
+export type Liczby = Record<IdWarstwy, number>;
+
+export function policz(id: IdWarstwy, liczby: Liczby): number {
   return liczby[id];
 }
 
@@ -108,14 +151,39 @@ export function policz(
  * Vienna and Moscow. Seen by looking at the map at 2560px, where red military marks sit over
  * Luxembourg and Warsaw, which is nobody's idea of a Baltic approach.
  */
-export function stanDanych(polaczone: boolean, samolotow: number, sekundOdOdczytu: number | null): string {
-  if (!polaczone) return "Łączenie z serwerem…";
-  if (samolotow === 0) return "Połączono, ale żaden samolot nie jest teraz widoczny.";
+export function stanDanych(
+  polaczone: boolean,
+  samolotow: number,
+  statkow: number,
+  sekundOdOdczytu: number | null,
+): string {
+  if (!polaczone) return "Brak połączenia z serwerem";
+  if (samolotow === 0 && statkow === 0) return "Połączono — w obszarze nic nie widać";
+
+  // Obie domeny w jednym zdaniu, bo obie sa na mapie. Wczesniej liczyly sie same samoloty i mapa
+  // milczala o osmiuset statkach, ktore na niej byly.
+  const czesci = [
+    samolotow > 0 ? `${samolotow} ${odmiana(samolotow, "samolot", "samoloty", "samolotów")}` : null,
+    statkow > 0 ? `${statkow} ${odmiana(statkow, "statek", "statki", "statków")}` : null,
+  ].filter(Boolean);
+
   const wiek =
     sekundOdOdczytu === null
       ? ""
-      : sekundOdOdczytu < 60
-        ? " · dane sprzed chwili"
-        : ` · dane sprzed ${Math.round(sekundOdOdczytu / 60)} min`;
-  return `${samolotow} samolotów w obserwowanym obszarze${wiek}`;
+      : sekundOdOdczytu < 15
+        ? " · odświeżono przed chwilą"
+        : sekundOdOdczytu < 90
+          ? ` · odświeżono ${sekundOdOdczytu} s temu`
+          : ` · odświeżono ${Math.round(sekundOdOdczytu / 60)} min temu`;
+
+  return `${czesci.join(" · ")}${wiek}`;
+}
+
+/** Polish counts three ways, and "126 samolot" in a header reads as a bug in the data. */
+export function odmiana(n: number, jeden: string, kilka: string, wiele: string): string {
+  const abs = Math.abs(n) % 100;
+  const ostatnia = abs % 10;
+  if (abs === 1) return jeden;
+  if (ostatnia >= 2 && ostatnia <= 4 && (abs < 12 || abs > 14)) return kilka;
+  return wiele;
 }

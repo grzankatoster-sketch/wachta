@@ -42,8 +42,11 @@ describe("widocznosc znacznikow na podkladzie", () => {
   it("wojskowy i cywilny roznia sie czyms wiecej niz kolorem", () => {
     // Czerwony i szary maja zblizona jasnosc, wiec przy daltonizmie kolor nie wystarcza.
     // Rozmiar niesie te sama informacje: promien wojskowego jest dwukrotnie wiekszy.
-    const [warstwa] = aircraftLayers([plane({ isMilitary: true }), plane({ hex: "bbb", isMilitary: false })]);
-    const promien = (warstwa.props as unknown as { getRadius: (a: LiveAircraft) => number }).getRadius;
+    // Po identyfikatorze, nie po pozycji: pierwsza warstwa to teraz linia kursu, a nie znaczniki.
+    const warstwa = aircraftLayers([plane({ isMilitary: true }), plane({ hex: "bbb", isMilitary: false })])
+      .find((l) => l.id === "aircraft");
+    expect(warstwa, "warstwa znacznikow").toBeDefined();
+    const promien = (warstwa!.props as unknown as { getRadius: (a: LiveAircraft) => number }).getRadius;
     expect(promien(plane({ isMilitary: true }))).toBeGreaterThanOrEqual(
       2 * promien(plane({ isMilitary: false })));
   });

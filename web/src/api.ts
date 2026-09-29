@@ -3,6 +3,11 @@ export interface LiveAircraft {
   lat: number; lon: number; altBaroFt: number | null; onGround: boolean;
   gsKt: number | null; trackDeg: number | null; ts: string;
 }
+export interface LiveShip {
+  mmsi: string; name: string | null; shipType: string | null; navStatus: string | null;
+  lat: number; lon: number; sogKt: number | null; cogDeg: number | null; ts: string;
+}
+export interface ShipTrackPoint { ts: string; lat: number; lon: number; sogKt: number | null; cogDeg: number | null }
 export interface AlertDto {
   id: number; detector: string; entityId: string; startedAt: string;
   lat: number; lon: number; score: number; evidence: string; state: string;

@@ -6,6 +6,14 @@ public sealed record LiveAircraft(
 
 public sealed record TrackPoint(DateTime Ts, double Lat, double Lon, int? AltBaroFt);
 
+/// <summary>One ship as the map draws it. ShipType is the raw AIS number - the front end decides
+/// what a 70 looks like, because that mapping is a display choice, not a fact about the hull.</summary>
+public sealed record LiveShip(
+    string Mmsi, string? Name, string? ShipType, string? NavStatus,
+    double Lat, double Lon, float? SogKt, float? CogDeg, DateTime Ts);
+
+public sealed record ShipTrackPoint(DateTime Ts, double Lat, double Lon, float? SogKt, float? CogDeg);
+
 public sealed record SourceInfo(string Id, string Name, string Url, string License, short TrustTier, string Attribution);
 
 /// <summary>One detector alert. Evidence stays raw JSON: the reader must be able to see what the

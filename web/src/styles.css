@@ -136,6 +136,23 @@ body {
 }
 
 .szukaj h2 { font-size: 15px; margin: 0 0 6px; }
+
+/* Panel wyszukiwania w stanie spoczynku to naglowek i pole - nic wiecej.
+   Rozwiniety byl najwiekszym blokiem na ekranie: trzy linijki objasnienia, trzy filtry i trzy
+   przyklady, wszystko naraz i na stale, dla funkcji, z ktorej korzysta sie raz na jakis czas.
+   Objasnienie i podpowiedzi sa potrzebne dokladnie wtedy, gdy ktos zaczyna pisac - wiec wtedy sie
+   pokazuja: od fokusu (CSS) albo od tresci (klasa .rozwiniety). Wyniki zawsze zostaja widoczne. */
+.szukaj .szukaj-wstep,
+.szukaj .filtry,
+.szukaj .podpowiedzi { display: none; }
+
+.szukaj:focus-within .szukaj-wstep,
+.szukaj.rozwiniety .szukaj-wstep { display: block; }
+
+.szukaj:focus-within .filtry,
+.szukaj.rozwiniety .filtry,
+.szukaj:focus-within .podpowiedzi,
+.szukaj.rozwiniety .podpowiedzi { display: flex; }
 .szukaj-wstep { margin: 0 0 10px; color: #8b949e; font-size: 12px; line-height: 1.45; }
 .szukaj form { display: flex; gap: 6px; }
 
@@ -233,7 +250,35 @@ body {
 }
 .naglowek h1 { margin: 0 0 6px; font-size: 17px; letter-spacing: 0.5px; }
 .naglowek p { margin: 0; font-size: 12px; line-height: 1.5; color: #c9d1d9; }
-.naglowek .stan { margin-top: 8px; color: #7ee2a8; font-size: 12px; }
+.naglowek .stan {
+  margin-top: 9px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  color: #7ee2a8;
+}
+.naglowek .stan.martwe { color: #8b949e; }
+
+.naglowek .puls {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateY(-1px);
+}
+.naglowek .stan.zywe .puls { animation: tetno 2s ease-in-out infinite; }
+
+/* Wolne i niepelne: swiecacy punkt ma dawac wrazenie oddechu, a nie migac na krawedzi wzroku.
+   Przy wylaczonych animacjach zostaje po prostu kropka - informacja jest w tekscie obok. */
+@keyframes tetno {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(126, 226, 168, 0.45); }
+  50%      { opacity: 0.55; box-shadow: 0 0 0 5px rgba(126, 226, 168, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .naglowek .stan.zywe .puls { animation: none; }
+}
 
 /* LEGENDA, KTORA JEST TEZ WYLACZNIKIEM. Osobna legenda to podpis obok obrazka i ludzie ja pomijaja;
    legenda, ktora da sie kliknac, jest najszybszym sposobem na sprawdzenie, co znaczyl dany znak -
@@ -244,7 +289,7 @@ body {
      cztery wiersze, czyli dokladnie to, co ta przebudowa miala naprawic. Gorna granica jest
      po to, zeby przy bardzo niskim oknie legenda nie wypchnela listy: wtedy przewija sie sama. */
   flex: 0 0 auto;
-  max-height: 45vh;
+  max-height: 52vh;
   width: 100%;
   box-sizing: border-box;
   /* Bez max-height: kolumna wyzej ogranicza calosc, a "min-height: 0" pozwala tej pozycji
@@ -262,9 +307,33 @@ body {
    na stale, a legenda i tak tlumaczy sie klikaniem: wylacz warstwe i zobacz, co znikneło.
    Prog 950px z pomiaru: przy 900px z opisami lista dawala 1 pozycje, bez nich 4; przy 1080px
    opisy mieszcza sie i lista i tak ma 4. */
+/* Opis warstwy pokazuje sie pod reka, nie na stale.
+   Szesc warstw razy trzy linijki objasnienia to wiecej, niz miesci sie obok listy alarmow na
+   jakimkolwiek laptopie - i wiecej, niz ktokolwiek czyta za drugim razem. Naglowki grup
+   ("W powietrzu", "Na morzu") plus akapit w naglowku niosa sens na co dzien; zdanie o warstwie
+   pojawia sie, gdy na nia najedziesz albo dojdziesz Tabem, i jest tez w atrybucie title.
+   Powyzej 1200 px wysokosci miejsca starcza na wszystko naraz, wiec opisy zostaja odslonete. */
+.warstwy li .opis { display: none; }
+.warstwy li:hover .opis,
+.warstwy li:focus-within .opis { display: block; }
+
+@media (min-height: 1200px) {
+  .warstwy li .opis { display: block; }
+}
+
 @media (max-height: 950px) {
-  .warstwy li p { display: none; }
   .warstwy li { margin-bottom: 4px; }
+}
+
+/* Naglowek grupy: maly, w wersaliki, wyciszony. Ma dzielic liste, a nie konkurowac z nazwami warstw. */
+.warstwy .grupa + .grupa { margin-top: 12px; }
+.warstwy .grupa h3 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6e7681;
 }
 
 .warstwy .obszar {

@@ -1,4 +1,4 @@
-import type { AlertDto, JammingDto, LiveAircraft } from "./api";
+import type { AlertDto, JammingDto, LiveAircraft, LiveShip } from "./api";
 import { parseEvidence } from "./api";
 import { NAZWY, dopisek, podmiot, szczegoly } from "./alert-text";
 
@@ -15,6 +15,7 @@ import { NAZWY, dopisek, podmiot, szczegoly } from "./alert-text";
 export type Selection =
   | { kind: "aircraft"; data: LiveAircraft }
   | { kind: "alert"; data: AlertDto }
+  | { kind: "ship"; data: LiveShip }
   | { kind: "jamming"; data: JammingDto };
 
 export interface Punkt {
@@ -353,8 +354,106 @@ function alertDetail(a: AlertDto): Szczegoly {
 }
 
 /** Top-level dispatch used by the detail panel: one map object in, three-section text out. */
+/**
+ * AIS ship types, as words.
+ *
+ * The wire carries a number because that is what AIS carries; turning it into a phrase is a display
+ * decision and belongs here, not in the API. Ranges rather than every code: 71 and 74 are both
+ * "cargo" to anyone reading this map, and pretending the distinction is meaningful would be dressing
+ * up a number we do not actually use.
+ */
+export function rodzajStatku(kod: string | null | undefined): string | null {
+  const n = Number(kod);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n >= 80 && n <= 89) return "tankowiec";
+  if (n >= 70 && n <= 79) return "masowiec / drobnicowiec";
+  if (n >= 60 && n <= 69) return "pasażerski";
+  if (n === 30) return "kuter rybacki";
+  if (n === 35) return "jednostka wojskowa";
+  if (n === 50) return "pilotówka";
+  if (n === 51) return "ratowniczy";
+  if (n === 52) return "holownik";
+  if (n >= 53 && n <= 59) return "jednostka portowa";
+  if (n >= 40 && n <= 49) return "jednostka szybka";
+  return "inna jednostka";
+}
+
+/**
+ * AIS navigational status, in words.
+ *
+ * The wire carries whatever the source sends - Digitraffic sends the number, other feeds send the
+ * phrase - and "Status nawigacyjny: 5" on a panel is the same raw-code failure this project fixed
+ * everywhere else. A code we cannot name is printed as the code, labelled as unknown, rather than
+ * silently dropped: an unrecognised status is information too.
+ */
+const STATUSY: Record<number, string> = {
+  0: "w drodze, na silniku",
+  1: "na kotwicy",
+  2: "bez możliwości manewru",
+  3: "ograniczona zdolność manewrowa",
+  4: "ograniczony zanurzeniem",
+  5: "zacumowany",
+  6: "na mieliźnie",
+  7: "połów",
+  8: "w drodze, pod żaglami",
+  14: "sygnał ratunkowy (AIS-SART)",
+  15: "nieokreślony",
+};
+
+export function statusSlownie(surowy: string | null | undefined): string | null {
+  if (surowy === null || surowy === undefined) return null;
+  const tekst = String(surowy).trim();
+  if (!tekst) return null;
+  const n = Number(tekst);
+  if (!Number.isFinite(n)) return tekst;           // zrodlo przyslalo juz opis slowny
+  return STATUSY[n] ?? `kod ${n} (nieznany)`;
+}
+
+const ROZA = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+/** A course in degrees said the way a person says it: "142 stopnie (SE)". */
+export function kursSlownie(deg: number | null | undefined): string | null {
+  if (deg === null || deg === undefined || !Number.isFinite(deg)) return null;
+  const kierunek = ROZA[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+  return `${Math.round(deg)}° (${kierunek})`;
+}
+
+function shipDetail(s: LiveShip): Szczegoly {
+  const rodzaj = rodzajStatku(s.shipType);
+  const wezly = s.sogKt ?? null;
+  const kurs = kursSlownie(s.cogDeg);
+  const plynie = (wezly ?? 0) >= 0.5;
+
+  const coToJest = [
+    `MMSI: ${s.mmsi}`,
+    rodzaj ? `Rodzaj (AIS ${s.shipType}): ${rodzaj}` : null,
+    wezly !== null ? `Prędkość: ${wezly.toFixed(1)} w.` : null,
+    kurs ? `Kurs: ${kurs}` : null,
+    statusSlownie(s.navStatus) ? `Status nawigacyjny: ${statusSlownie(s.navStatus)}` : null,
+    `Ostatnia pozycja: ${new Date(s.ts).toLocaleString("pl-PL")}`,
+  ].filter((x): x is string => x !== null);
+
+  const coZTegoWynika = plynie
+    ? [`Statek jest w drodze: ${wezly!.toFixed(1)} w. kursem ${kurs ?? "nieznanym"}. Linia przed dziobem na mapie pokazuje, dokąd dopłynie w dwie minuty, jeśli nic nie zmieni.`]
+    : ["Statek nie robi drogi — stoi na kotwicy, przy nabrzeżu albo dryfuje. Sam postój niczego nie znaczy: większość jednostek na tej mapie stoi."];
+
+  return {
+    tytul: s.name?.trim() || s.mmsi,
+    podtytul: rodzaj ?? "jednostka o nieznanym typie",
+    coToJest,
+    coZTegoWynika,
+    naPodstawie: [
+      "Źródło: AIS przez Digitraffic (Fintraffic, licencja CC BY 4.0) — transpondery statków, odbierane przez fińską sieć brzegową.",
+      "AIS nadaje sam statek. Nazwa, rodzaj i status nawigacyjny to pola wpisywane przez załogę i bywają nieaktualne albo puste; pozycja, prędkość i kurs idą z odbiornika i są wiarygodniejsze.",
+      "Zasięg tej sieci to Zatoka Fińska i Botnicka. Brak statku na mapie nie znaczy, że go nie ma — znaczy, że nikt go stąd nie słyszy.",
+    ],
+    tor: null,
+  };
+}
+
 export function zbudujSzczegoly(sel: Selection): Szczegoly {
   if (sel.kind === "aircraft") return aircraftDetail(sel.data);
+  if (sel.kind === "ship") return shipDetail(sel.data);
   if (sel.kind === "jamming") return jammingDetail(sel.data);
   return alertDetail(sel.data);
 }
@@ -367,6 +466,7 @@ export function zbudujSzczegoly(sel: Selection): Szczegoly {
 export function selectionFromPicked(object: unknown): Selection | null {
   if (!object || typeof object !== "object") return null;
   if ("hex" in object && "lat" in object) return { kind: "aircraft", data: object as LiveAircraft };
+  if ("mmsi" in object && "lat" in object) return { kind: "ship", data: object as LiveShip };
   if ("detector" in object) return { kind: "alert", data: object as AlertDto };
   if ("h3" in object) return { kind: "jamming", data: object as JammingDto };
   return null;

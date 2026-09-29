@@ -9,16 +9,18 @@ import { DetailPanel } from "./components/DetailPanel";
 import { Warstwy } from "./components/Warstwy";
 import { SourcesFooter } from "./components/SourcesFooter";
 import { aircraftLayers } from "./layers/aircraft";
+import { shipLayers } from "./layers/ships";
 import { alertsLayer } from "./layers/alerts";
 import { jammingLayer } from "./layers/jamming";
 import { tripsLayer } from "./layers/trips";
+import { isCargo } from "./colors";
 import { useLive } from "./live";
 import { replayBounds, toTrips, type Trip } from "./replay";
 import { selectionFromPicked, zbudujSzczegoly, type Selection } from "./detail";
 import { stanDanych, WSZYSTKO_WIDOCZNE, type Widoczne } from "./warstwy";
 
 export default function App() {
-  const { aircraft, alerts, setAlerts, connected } = useLive();
+  const { aircraft, ships, alerts, setAlerts, connected } = useLive();
   const [jamming, setJamming] = useState<JammingDto[]>([]);
   const [view, setView] = useState<MapViewState>(BALTIC_VIEW);
   const [replay, setReplay] = useState<{ trips: Trip[]; start: number; max: number } | null>(null);
@@ -63,26 +65,40 @@ export default function App() {
   // a pusta lista znika z mapy calkowicie. Dzieki temu wylaczenie w panelu znaczy to, co widac.
   const widoczneSamoloty = aircraft.filter((a) =>
     a.isMilitary ? widoczne.wojskowe : widoczne.cywilne);
+  const widoczneStatki = ships.filter((s) =>
+    isCargo(s.shipType) ? widoczne.ladunek : widoczne.statki);
   const widoczneAlarmy = widoczne.alarmy ? alerts : [];
   const widoczneZaklocenia = widoczne.zaklocenia ? jamming : [];
 
   // Wiek najswiezszej pozycji. Wczesniej szlo tu null, wiec zdanie o swiezosci nigdy sie nie
   // pokazywalo - mapa wygladala tak samo, czy dane mialy 5 sekund, czy przyszly ostatni raz kwadrans
   // temu. Brak danych zostaje nullem: "nie wiem, ile to ma lat" to nie to samo co "jest swieze".
-  const sekundOdOdczytu = aircraft.length
-    ? Math.max(0, Math.round((Date.now() - Math.max(...aircraft.map((a) => Date.parse(a.ts)))) / 1000))
+  // Liczony z OBU zrodel. Samoloty przychodza co kilka sekund, statki co kilkadziesiat; branie
+  // wieku z samych samolotow mowiloby "sprzed chwili" takze wtedy, gdy AIS milczy od kwadransa.
+  const znaczniki = [...aircraft.map((a) => a.ts), ...ships.map((s) => s.ts)];
+  const sekundOdOdczytu = znaczniki.length
+    ? Math.max(0, Math.round((Date.now() - Math.max(...znaczniki.map(Date.parse))) / 1000))
     : null;
 
   const liczby = {
     wojskowe: aircraft.filter((a) => a.isMilitary && !a.onGround).length,
     cywilne: aircraft.filter((a) => !a.isMilitary && !a.onGround).length,
+    ladunek: ships.filter((s) => isCargo(s.shipType)).length,
+    statki: ships.filter((s) => !isCargo(s.shipType)).length,
     alarmy: alerts.length,
     zaklocenia: jamming.length,
   };
 
   const layers = replay
     ? [jammingLayer(widoczneZaklocenia), tripsLayer(replay.trips, currentTime), alertsLayer(widoczneAlarmy)]
-    : [jammingLayer(widoczneZaklocenia), ...aircraftLayers(widoczneSamoloty), alertsLayer(widoczneAlarmy)];
+    : [
+        jammingLayer(widoczneZaklocenia),
+        // Statki pod samolotami: jest ich osiem razy wiecej i sa mniejsze, wiec lezac na wierzchu
+        // zabieraly by klikniecia maszynom, ktorych i tak jest na mapie garstka.
+        ...shipLayers(widoczneStatki),
+        ...aircraftLayers(widoczneSamoloty),
+        alertsLayer(widoczneAlarmy),
+      ];
 
   return (
     <div style={{ position: "fixed", inset: 0 }}>
@@ -102,7 +118,15 @@ export default function App() {
           własne detektory uznały za warte sprawdzenia. Każdy alarm jest <b>kandydatem do
           sprawdzenia</b>, nigdy wyrokiem.
         </p>
-        <p className="stan">{stanDanych(connected, liczby.wojskowe + liczby.cywilne, sekundOdOdczytu)}</p>
+        {/* Kropka pulsuje tylko przy polaczeniu. To jedyny element interfejsu, ktory sie rusza
+            sam z siebie - i wlasnie dlatego niesie informacje: jak stoi, to znaczy, ze stoi. */}
+        <p className={`stan ${connected ? "zywe" : "martwe"}`}>
+          <span className="puls" aria-hidden="true" />
+          <span>
+            {stanDanych(connected, liczby.wojskowe + liczby.cywilne,
+                        liczby.ladunek + liczby.statki, sekundOdOdczytu)}
+          </span>
+        </p>
         </header>
         <Warstwy widoczne={widoczne} onZmiana={setWidoczne} liczby={liczby} />
         <AlertsPanel

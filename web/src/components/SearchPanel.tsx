@@ -83,7 +83,13 @@ export function SearchPanel() {
   };
 
   return (
-    <section className="szukaj" aria-label="Wyszukiwanie po znaczeniu">
+    // "rozwiniety" zapala sie od TRESCI, a rozwiniecie od fokusu zalatwia CSS (:focus-within).
+    // Gdyby stan rozwiniecia trzymal React na onBlur, klikniecie w podpowiedz zwijaloby panel
+    // w polowie drogi do niej - klasyczna pulapka z rozmyciem fokusu przed zdarzeniem kliknięcia.
+    <section
+      className={`szukaj ${stan.rodzaj !== "pusto" || pytanie.trim() ? "rozwiniety" : ""}`}
+      aria-label="Wyszukiwanie po znaczeniu"
+    >
       <h2>Szukaj po znaczeniu</h2>
       <p className="szukaj-wstep">
         Pytaj po polsku. Zdarzenia są po angielsku, doniesienia bywają po rosyjsku i ukraińsku —

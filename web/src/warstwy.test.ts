@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   przelacz,
+  odmiana,
   stanDanych,
   WARSTWY,
   wszystkoWylaczone,
   WSZYSTKO_WIDOCZNE,
+  type Widoczne,
 } from "./warstwy";
 
 /**
@@ -62,28 +64,48 @@ describe("wlaczanie i wylaczanie", () => {
     // Mapa z wylaczonymi warstwami wyglada identycznie jak mapa bez danych, a to dwie rozne rzeczy:
     // za jedna odpowiada czytelnik, za druga system.
     expect(wszystkoWylaczone(WSZYSTKO_WIDOCZNE)).toBe(false);
-    const nic = { wojskowe: false, cywilne: false, alarmy: false, zaklocenia: false };
+    const nic: Widoczne = { wojskowe: false, cywilne: false, ladunek: false, statki: false,
+                            alarmy: false, zaklocenia: false };
     expect(wszystkoWylaczone(nic)).toBe(true);
   });
 });
 
 describe("stan danych", () => {
   it("brak polaczenia mowi o polaczeniu, nie o braku samolotow", () => {
-    expect(stanDanych(false, 0, null)).toMatch(/Łączenie/);
+    expect(stanDanych(false, 0, 0, null)).toMatch(/Brak połączenia/);
   });
 
-  it("polaczenie bez samolotow mowi wprost, ze polaczenie jest", () => {
+  it("polaczenie bez niczego mowi wprost, ze polaczenie jest", () => {
     // Inaczej pusta mapa wyglada jak awaria, a jest poprawnym stanem.
-    expect(stanDanych(true, 0, null)).toMatch(/Połączono/);
+    expect(stanDanych(true, 0, 0, null)).toMatch(/Połączono/);
   });
 
   it("podaje wiek danych, bo migawka bez godziny udaje terazniejszosc", () => {
-    expect(stanDanych(true, 120, 30)).toMatch(/sprzed chwili/);
-    expect(stanDanych(true, 120, 600)).toMatch(/sprzed 10 min/);
-    expect(stanDanych(true, 120, null)).not.toMatch(/sprzed/);
+    expect(stanDanych(true, 120, 0, 3)).toMatch(/przed chwilą/);
+    expect(stanDanych(true, 120, 0, 40)).toMatch(/40 s temu/);
+    expect(stanDanych(true, 120, 0, 600)).toMatch(/10 min temu/);
+    expect(stanDanych(true, 120, 0, null)).not.toMatch(/odświeżono/);
   });
 
-  it("liczy samoloty", () => {
-    expect(stanDanych(true, 442, null)).toMatch(/442 samolot/);
+  it("liczy oba zrodla, nie tylko samoloty", () => {
+    // Regresja: naglowek mowil o samolotach, a na mapie bylo osiemset statkow, o ktorych milczal.
+    const zdanie = stanDanych(true, 126, 817, null);
+    expect(zdanie).toMatch(/126 samolotów/);
+    expect(zdanie).toMatch(/817 statków/);
+  });
+
+  it("nie wymienia zrodla, ktorego nie ma", () => {
+    expect(stanDanych(true, 126, 0, null)).not.toMatch(/statk/);
+    expect(stanDanych(true, 0, 817, null)).not.toMatch(/samolot/);
+  });
+
+  it("odmienia liczebniki, bo '126 samolot' czyta sie jak blad danych", () => {
+    expect(odmiana(1, "samolot", "samoloty", "samolotów")).toBe("samolot");
+    expect(odmiana(3, "samolot", "samoloty", "samolotów")).toBe("samoloty");
+    expect(odmiana(5, "samolot", "samoloty", "samolotów")).toBe("samolotów");
+    expect(odmiana(12, "samolot", "samoloty", "samolotów")).toBe("samolotów");   // 12, nie 12-2
+    expect(odmiana(22, "samolot", "samoloty", "samolotów")).toBe("samoloty");
+    expect(odmiana(126, "samolot", "samoloty", "samolotów")).toBe("samolotów");
+    expect(odmiana(0, "samolot", "samoloty", "samolotów")).toBe("samolotów");
   });
 });
