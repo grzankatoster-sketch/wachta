@@ -39,3 +39,33 @@ public sealed record SearchHit(
 /// reads this - a person or a model - will be exactly as careful as the response makes them.</summary>
 public sealed record SearchResult(
     string Query, string Model, double MinScore, int Found, IReadOnlyList<SearchHit> Hits, string Caveat);
+
+/// <summary>One war the reader can pick off the list. <c>Id</c> is the two country codes in
+/// alphabetical order ("RUS-UKR"), so the same pair keeps the same id no matter which side GDELT
+/// happened to put in actor1 on a given row - which is what makes it safe to link to.</summary>
+public sealed record ConflictDto(
+    string Id, string Nazwa, string Actor1, string Actor2, int Events, DateTime? LastEventAt);
+
+/// <summary>One event on the front. <c>Kind</c> is the Polish label the CAMEO root code was stored
+/// under; <c>Sources</c> and <c>Mentions</c> measure how widely it was written up, not how true it
+/// is - a hundred articles repeating one agency dispatch are still one dispatch.</summary>
+public sealed record ConflictEventDto(
+    string Id, DateTime? Ts, string? Kind, string? Actor1, string? Actor2, string? Place,
+    double? Lat, double? Lon, float? Goldstein, int? Sources, string? Url, int? Mentions);
+
+/// <summary>How one side told the event. <c>FromTld</c> is a COUNT, not a flag: it says how many of
+/// these articles got their side from the country domain instead of from a named outlet, which is
+/// what <see cref="OnlyGuessed"/> is built from. It mirrors <c>SideView.from_tld</c> in
+/// <c>versions.py</c>, which is also a count.</summary>
+public sealed record SideVersionDto(
+    string Side, int Articles, double MeanTone, IReadOnlyList<string> Languages,
+    IReadOnlyList<string> Examples, int FromTld, bool OnlyGuessed);
+
+/// <summary>The two-versions comparison for one event.
+///
+/// <c>IsWeak</c> and <c>OnlyGuessed</c> travel with the data for the same reason the search endpoint
+/// carries its caveat: a comparison resting on one article, or on nothing but country-domain
+/// guesses, looks identical to a solid one - two sides, two numbers, a tone gap - so the reader is
+/// exactly as careful as the response lets them be.</summary>
+public sealed record EventVersionsDto(
+    string EventId, int TotalArticles, double ToneGap, bool IsWeak, IReadOnlyList<SideVersionDto> Sides);
