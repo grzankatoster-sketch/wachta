@@ -1,0 +1,228 @@
+/* WYBOR WOJNY. Szuflada u dolu, na prawo od lewej kolumny i nad paskiem odtwarzania - te trzy
+   wspolrzedne sa wziete z .lewa-kolumna (330 + 12 + 12) i z .replay (bottom 36 + jego wysokosc),
+   zeby nic nie nachodzilo na nic. Zwinięta jest jednym przyciskiem, bo reszta aplikacji odpowiada
+   na pytanie "co sie rusza teraz", a to jest inne pytanie i nie ma prawa zabierac mapy na stale. */
+.wojna-zwiniety {
+  position: absolute;
+  left: 364px;
+  bottom: 78px;
+  z-index: 10;
+}
+.wojna-zwiniety button {
+  padding: 7px 14px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117e6;
+  color: #e6edf3;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wojna-zwiniety button:hover { background: #21262d; }
+.wojna-zwiniety button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+
+.wojna {
+  position: absolute;
+  left: 364px;
+  right: 12px;
+  bottom: 78px;
+  /* Trzecia kolumna - zestawienie wersji - jest sensem tego widoku i potrzebuje wysokosci na
+     ostrzezenie, zdanie o rozjezdzie i co najmniej dwie strony bez przewijania. */
+  height: min(58vh, 520px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 10px 14px 12px;
+  background: #0d1117f2;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 10;
+}
+
+/* Panel szczegolow (role="dialog") wchodzi z prawej na 380 px - szuflada ustepuje mu miejsca
+   zamiast chowac sie pod nim, tak samo jak robi to panel wyszukiwania. */
+body:has([role="dialog"]) .wojna { right: calc(min(416px, 96vw) + 16px); }
+
+.wojna-glowa { position: relative; flex: 0 0 auto; padding-right: 28px; }
+.wojna-glowa h2 { margin: 0 0 3px; font-size: 15px; }
+.wojna-glowa p { margin: 0 0 7px; line-height: 1.45; }
+.wojna-okna { display: flex; gap: 5px; margin-bottom: 8px; }
+.wojna-okna button {
+  padding: 3px 9px;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  background: #161b22;
+  color: #c9d1d9;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.wojna-okna button:hover { background: #21262d; }
+.wojna-okna button:focus-visible { outline: 2px solid #58a6ff; outline-offset: 1px; }
+.wojna-okna .wybrany { border-color: #58a6ff; background: #14243a; color: #e6edf3; }
+
+.wojna-zamknij {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #161b22;
+  color: #c9d1d9;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wojna-zamknij:hover { background: #21262d; }
+
+.wojna-kolumny {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 12px;
+}
+.wojna-kolumna {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  border-left: 1px solid #21262d;
+  padding-left: 10px;
+}
+.wojna-kolumna:first-child { border-left: 0; padding-left: 0; }
+.wojna-kolumna h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.wojna-kolumna ul { list-style: none; margin: 0; padding: 0; }
+.wojna-kolumna li > button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #21262d;
+  color: inherit;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.wojna-kolumna li > button:hover { background: #161b22; }
+.wojna-kolumna li > button:focus-visible { outline: 2px solid #58a6ff; outline-offset: -2px; }
+.wojna-kolumna li > button[aria-current] { background: #14243a; box-shadow: inset 2px 0 0 #58a6ff; }
+
+/* Konflikt zbudowany z jednego zdarzenia wyglada na liscie identycznie jak konflikt z tysiacem. */
+.wojna-cienki {
+  display: block;
+  margin-top: 2px;
+  color: #e3b341;
+  font-size: 11px;
+}
+
+/* Brak odpowiedzi i pusta odpowiedz musza wygladac inaczej, bo znacza co innego - ta sama zasada
+   co przy wyszukiwaniu (.szukaj-nic / .szukaj-blad). */
+.wojna-nic { margin: 6px 0; padding: 7px 9px; border-left: 3px solid #d29922; background: #1c1710;
+  font-size: 12px; line-height: 1.45; color: #e3b341; }
+.wojna-blad { margin: 6px 0; padding: 7px 9px; border-left: 3px solid #f85149; background: #1f1315;
+  font-size: 12px; line-height: 1.45; color: #ff9d95; }
+
+.wojna-os { margin: 0 0 8px; }
+.wojna-slupki {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 42px;
+  padding: 0 1px;
+  background: #0b0f14;
+  border-radius: 4px;
+}
+.wojna-slupek { flex: 1 1 0; background: #58a6ff; border-radius: 1px 1px 0 0; min-width: 2px; }
+.wojna-os-opis { display: flex; justify-content: space-between; margin-top: 2px; color: #6e7681; font-size: 10px; }
+
+/* ZESTAWIENIE WERSJI. Kolejnosc czytania jest tu argumentem: najpierw ostrzezenie o cienkiej
+   podstawie, potem liczby, na koncu przypomnienie, czym wydzwiek NIE jest. */
+.wersje h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.wersje-zdarzenie { margin: 0 0 8px; font-size: 12px; color: #c9d1d9; line-height: 1.4; }
+
+.wersje-slabe {
+  margin: 0 0 9px;
+  padding: 8px 10px;
+  border: 1px solid #9e6a03;
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: #1c1710;
+  color: #e3b341;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.wersje-slabe strong { display: block; margin-bottom: 3px; font-size: 12px; }
+.wersje-slabe ul { list-style: disc; margin: 0; padding-left: 16px; }
+
+.wersje-rozjazd { margin: 0 0 9px; font-size: 12px; line-height: 1.45; color: #c9d1d9; }
+.wersje-rozjazd strong { font-size: 13px; }
+.wersje-rozjazd.brak-porownania strong { color: #8b949e; }
+.wersje-rozjazd.zbiezne strong { color: #7ee2a8; }
+.wersje-rozjazd.rozne strong { color: #e3b341; }
+.wersje-rozjazd.skrajne strong { color: #ff9d95; }
+
+.wersje-strony { list-style: none; margin: 0 0 8px; padding: 0; }
+.wersje-strony > li { padding: 7px 0; border-top: 1px solid #21262d; }
+/* Strona oparta na jednym artykule albo na samych zgadnietych domenach jest wizualnie stlumiona -
+   inaczej hollow i solidna kreska wygladaja tak samo szeroko. */
+.wersje-strony > li.slaba { opacity: 0.92; border-left: 2px solid #9e6a03; padding-left: 7px; }
+.strona-glowa { display: flex; align-items: baseline; gap: 8px; }
+.strona-nazwa { flex: 1 1 auto; font-size: 12px; font-weight: 600; }
+.strona-ile { flex: 0 0 auto; color: #8b949e; font-size: 11px; font-variant-numeric: tabular-nums; }
+.strona-pasek { height: 5px; margin: 4px 0 4px; background: #161b22; border-radius: 3px; overflow: hidden; }
+.strona-pasek span { display: block; height: 100%; background: #58a6ff; border-radius: 3px; }
+.wersje-strony > li.slaba .strona-pasek span {
+  /* Pasek strony bez pokrycia jest w paski, nie pelny: ma sie czytac jako "tyle wyszlo z tego,
+     co policzylismy", a nie jako zmierzony udzial w debacie. */
+  background: repeating-linear-gradient(45deg, #9e6a03 0 4px, #4d3401 4px 8px);
+}
+.strona-ton { font-size: 11px; color: #c9d1d9; font-variant-numeric: tabular-nums; }
+.strona-jezyki { font-size: 11px; color: #8b949e; line-height: 1.4; }
+.strona-ostrzezenia { list-style: none; margin: 4px 0 0; padding: 0; }
+.strona-ostrzezenia li { color: #e3b341; font-size: 11px; line-height: 1.4; }
+.strona-ostrzezenia li::before { content: "▲ "; }
+.strona-przyklady { margin-top: 4px; display: flex; gap: 10px; }
+.strona-przyklady a { color: #58a6ff; font-size: 11px; }
+
+.wersje-brakujace {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #8b949e;
+}
+.wersje-zastrzezenie {
+  margin: 0;
+  padding-top: 7px;
+  border-top: 1px solid #21262d;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #8b949e;
+}
+
+/* Waski ekran: trzy kolumny obok siebie przestaja byc czytelne okolo 1200 px, wiec zestawienie
+   wersji schodzi pod spod i szuflada rosnie. Kolejnosc czytania zostaje ta sama. */
+@media (max-width: 1200px) {
+  .wojna { height: min(64vh, 520px); }
+  .wojna-kolumny { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .wojna-wersje { grid-column: 1 / -1; border-left: 0; padding-left: 0; border-top: 1px solid #21262d; padding-top: 8px; }
+}

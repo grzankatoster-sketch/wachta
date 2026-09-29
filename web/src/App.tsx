@@ -26,6 +26,8 @@ import { najnowszy, zegarDanych } from "./ruch";
 import { replayBounds, toTrips, type Trip } from "./replay";
 import { selectionFromPicked, zbudujSzczegoly, type Selection } from "./detail";
 import { stanDanych, WSZYSTKO_WIDOCZNE, type Widoczne } from "./warstwy";
+import { uzyjWojny } from "./uzyj-wojny";
+import { PanelWojny } from "./components/PanelWojny";
 
 export default function App() {
   const { aircraft, ships, alerts, setAlerts, connected, odebranoSamoloty, odebranoStatki } = useLive();
@@ -38,6 +40,9 @@ export default function App() {
   const [wybrany, setWybrany] = useState<Selection | null>(null);
   // Przebyta trasa wybranego statku: skad przyplynal (patrz slad.ts). Null dla wszystkiego innego.
   const slad = useSladStatku(wybrany);
+  // Wybor wojny: konflikt -> zdarzenia -> jak kazda strona je opisuje. Caly stan i cala logika
+  // siedza w uzyj-wojny.ts i wersje.ts; tutaj zostaja warstwy na mape i jeden panel.
+  const wojna = uzyjWojny((lon, lat, zoom) => setView((v) => ({ ...v, longitude: lon, latitude: lat, zoom })));
 
   useEffect(() => {
     getJSON<AlertDto[]>("/api/alerts").then(setAlerts).catch(() => undefined);
@@ -138,6 +143,7 @@ export default function App() {
         // Na samym wierzchu: co jest wybrane i czego ten wybor dotyczy. Bez tego klikniecie alarmu
         // centrowalo mape na lawicy jednakowych pierscieni i czytelnik nie wiedzial, ktory jest ten.
         ...wyborLayers(wybrany, ships),
+        ...wojna.warstwy,
       ];
 
   return (
@@ -146,9 +152,10 @@ export default function App() {
         layers={layers}
         viewState={view}
         onViewStateChange={setView}
-        onObjectClick={(o) => setWybrany(selectionFromPicked(o))}
+        onObjectClick={(o) => { if (!wojna.klikMapy(o)) setWybrany(selectionFromPicked(o)); }}
       />
       {wybrany && <DetailPanel szczegoly={zbudujSzczegoly(wybrany, slad)} onClose={() => setWybrany(null)} />}
+      <PanelWojny stan={wojna} />
       <SearchPanel />
       <div className="lewa-kolumna">
         <header className="naglowek">
