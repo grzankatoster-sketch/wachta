@@ -54,6 +54,25 @@ export function contrastRatio(a: [number, number, number], b: [number, number, n
 export const SHIP_CARGO: [number, number, number] = [11, 94, 120];
 export const SHIP_OTHER: [number, number, number] = [70, 98, 125];
 
+/**
+ * Submarine infrastructure: the cables and pipelines D6 measures ships against.
+ *
+ * Two hues, because the layer is called "kable i rurociagi" and the reader should be able to tell
+ * which one an alarm is standing on without opening the panel. Both had to clear 3:1 against the
+ * darkest surface of the basemap, which is the water (BASEMAP_SEA, luminance 0.570) - that caps a
+ * line's luminance at 0.157 and forces every mark on this map into the same dark band the ships
+ * already occupy. Measured with contrastRatio() above:
+ *   KABEL    [110,66,140]  land 6.68:1, sea 4.40:1
+ *   RUROCIAG [140,78,30]   land 5.85:1, sea 3.85:1
+ *
+ * Against the ships they score 1.02:1 to 1.17:1, i.e. the same lightness - there is no room left
+ * below 0.157 to separate anything by brightness. So the separation is hue (violet and sienna
+ * against the ships' blue-teal) plus form: infrastructure is a 1.2 px line drawn under everything
+ * else and never a mark. A line and a dot are not confusable even when they are equally dark.
+ */
+export const KABEL: [number, number, number] = [110, 66, 140];
+export const RUROCIAG: [number, number, number] = [140, 78, 30];
+
 /** AIS type codes 70-89 carry freight; the rest work the port or fish. Unknown counts as "other". */
 export function isCargo(shipType: string | null | undefined): boolean {
   const n = Number(shipType);
