@@ -59,3 +59,32 @@ describe("statki na mapie", () => {
     expect(katFn("ships-obwodka")(statek({ cogDeg: 135 }))).toBe(-135);
   });
 });
+
+describe("trafianie w statek", () => {
+  it("kazdy statek ma cel trafien wiekszy niz jego znacznik", () => {
+    // Stojacy statek to kropka o promieniu 2.2-3.4 px, czyli cel o srednicy 4.4 px - ponizej tego,
+    // w co trafia sie mysza bez celowania. Stojace kadluby to material dla D5 i D6, wiec akurat
+    // one nie moga byc najtrudniejsze do klikniecia.
+    const w = shipLayers([statek({ sogKt: 0 }), statek({ mmsi: "2", sogKt: 12 })], TERAZ);
+    const cel = w.find((l) => l.id === "ships-hit");
+    expect(cel, "warstwa celu trafien").toBeDefined();
+    expect((cel!.props.data as LiveShip[]).length).toBe(2);   // takze plynace
+    expect(cel!.props.pickable).toBe(true);
+
+    const promien = (cel!.props as unknown as { getRadius: number }).getRadius;
+    const kropka = (w.find((l) => l.id === "ships-stopped")!.props as unknown as
+      { getRadius: (s: LiveShip) => number }).getRadius;
+    expect(promien).toBeGreaterThan(kropka(statek({ sogKt: 0 })) * 2);
+  });
+
+  it("cel trafien jest niewidoczny", () => {
+    // Gdyby cokolwiek rysowal, 800 koleczek po 16 px zalaloby mape.
+    const cel = shipLayers([statek({})], TERAZ).find((l) => l.id === "ships-hit");
+    expect((cel!.props as unknown as { getFillColor: number[] }).getFillColor).toEqual([0, 0, 0, 0]);
+  });
+
+  it("cel trafien lezy pod sylwetkami, zeby nie odbieral im klikniec", () => {
+    const ids = shipLayers([statek({})], TERAZ).map((l) => l.id);
+    expect(ids.indexOf("ships-hit")).toBeLessThan(ids.indexOf("ships"));
+  });
+});

@@ -30,6 +30,16 @@ const PROJEKCJA_MIN = 30;
 
 const KM_NA_MILE_MORSKA = 1.852;
 
+/**
+ * Pick radius for every vessel, visible size notwithstanding.
+ *
+ * Eight pixels is a 16 px target, which is about the smallest a pointer hits reliably and still
+ * narrow enough that neighbouring hulls in a shipping lane stay separable: the median distance
+ * between a ship and its nearest neighbour in this data is far larger than that everywhere except
+ * inside harbours, where the traffic is service craft anyway.
+ */
+const CEL_TRAFIENIA_PX = 8;
+
 export function wRuchu(s: LiveShip): boolean {
   return (s.sogKt ?? 0) >= MIN_W_RUCHU_KT && s.cogDeg !== null && s.cogDeg !== undefined;
 }
@@ -67,6 +77,32 @@ export function shipLayers(data: LiveShip[], terazMs: number): Layer[] {
   const wyzwalacze = { updateTriggers: { getPosition: terazMs, getSourcePosition: terazMs, getTargetPosition: terazMs, getColor: terazMs, getFillColor: terazMs } };
 
   return [
+    // Niewidoczny cel trafien pod wszystkim.
+    //
+    // Stojacy statek rysuje sie jako kropka o promieniu rozmiar/5, czyli 2.2-3.4 px - cel o
+    // srednicy 4.4 px. To ponizej tego, w co czlowiek trafia mysza bez celowania, a stojacych
+    // jednostek bywa na ekranie szescset naraz. Nie jest to drobiazg: stojace kadluby to dokladnie
+    // material dla D5 (przeladunek burta w burte) i D6 (wleczona kotwica), wiec najtrudniejsze do
+    // trafienia byly obiekty, po ktore czytelnik siega najczesciej.
+    //
+    // UCZCIWIE O DOWODACH: probowalem to potwierdzic skryptem klikajacym w wyliczone wspolrzedne
+    // statkow i wyszlo "450 klikniec, zero paneli". Ten pomiar byl NIEWAZNY - moje przeliczanie
+    // stopni na piksele bylo blednie, skrypt klikal w inne miejsca niz zamierzalem (kontrola na
+    // duzych pierscieniach alarmow: 0/25 trafien). Zmiana zostaje, bo 4.4 px broni sie samo, ale
+    // nie stoi za nia pomiar na zywym ekranie.
+    //
+    // Osobna warstwa, a nie wiekszy promien, bo znacznik ma zostac maly - gesty pas ruchu zlalby
+    // sie w plame. Lezy na samym dole, wiec precyzyjne klikniecie w sylwetke nadal trafia w nia.
+    new ScatterplotLayer<LiveShip>({
+      id: "ships-hit",
+      data,
+      getPosition: gdzie,
+      getFillColor: [0, 0, 0, 0],
+      getRadius: CEL_TRAFIENIA_PX,
+      radiusUnits: "pixels",
+      pickable: true,
+      ...wyzwalacze,
+    }),
     new LineLayer<LiveShip>({
       id: "ship-course",
       data: plynace,
