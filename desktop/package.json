@@ -6,14 +6,28 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "skrot": "powershell -ExecutionPolicy Bypass -File skrot-na-pulpit.ps1"
   },
   "build": {
     "appId": "pl.wachta.desktop",
     "productName": "WACHTA",
-    "files": ["main.js", "preload.js", "status.html", "ikona.png"],
-    "win": { "target": "nsis", "icon": "ikona.png" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true }
+    "files": [
+      "main.js",
+      "preload.js",
+      "status.html",
+      "ikona.png",
+      "ikona.ico"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "ikona.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   },
   "devDependencies": {
     "electron": "^33.0.0"
