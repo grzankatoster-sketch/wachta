@@ -49,6 +49,10 @@ services:
     build: { context: ., dockerfile: infra/docker/python.Dockerfile }
     environment:
       WACHTA_DB: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/wachta
+      # Drugie zrodlo AIS - poludniowy Baltyk (Zatoka Gdanska, polskie wybrzeze, Kaliningrad,
+      # ciesniny). Puste = detektory chodza jak dotad, na samym Digitrafficu, i mowia to w logu.
+      # Jak zdobyc klucz: docs/SOURCES.md, sekcja "AISStream".
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY:-}
       # Petla dopisuje nowe alarmy do indeksu wektorowego, wiec potrzebuje tego samego modelu
       # osadzen co API - i z tego samego powodu: "localhost" w kontenerze to ten kontener, a model
       # chodzi na HOSCIE. Ollama nieobecna = indeksowanie przepada z linijka w logu, petla idzie dalej.
