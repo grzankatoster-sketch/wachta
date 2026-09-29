@@ -13,6 +13,8 @@ import { shipLayers } from "./layers/ships";
 import { alertsLayer } from "./layers/alerts";
 import { jammingLayer } from "./layers/jamming";
 import { tripsLayer } from "./layers/trips";
+import { sladLayers } from "./layers/slad";
+import { useSladStatku } from "./uzyj-sladu";
 import { isCargo } from "./colors";
 import { kategoriaSamolotu, kategoriaStatku, obecne } from "./typy";
 import { useLive } from "./live";
@@ -31,6 +33,8 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [widoczne, setWidoczne] = useState<Widoczne>(WSZYSTKO_WIDOCZNE);
   const [wybrany, setWybrany] = useState<Selection | null>(null);
+  // Przebyta trasa wybranego statku: skad przyplynal (patrz slad.ts). Null dla wszystkiego innego.
+  const slad = useSladStatku(wybrany);
 
   useEffect(() => {
     getJSON<AlertDto[]>("/api/alerts").then(setAlerts).catch(() => undefined);
@@ -113,6 +117,8 @@ export default function App() {
     ? [jammingLayer(widoczneZaklocenia), tripsLayer(replay.trips, currentTime), alertsLayer(widoczneAlarmy)]
     : [
         jammingLayer(widoczneZaklocenia),
+        // Slad pod znacznikami: to tlo dla wybranego statku, nie kolejny obiekt do klikania.
+        ...sladLayers(slad),
         // Statki pod samolotami: jest ich osiem razy wiecej i sa mniejsze, wiec lezac na wierzchu
         // zabieraly by klikniecia maszynom, ktorych i tak jest na mapie garstka.
         ...shipLayers(widoczneStatki, terazStatki),
@@ -128,7 +134,7 @@ export default function App() {
         onViewStateChange={setView}
         onObjectClick={(o) => setWybrany(selectionFromPicked(o))}
       />
-      {wybrany && <DetailPanel szczegoly={zbudujSzczegoly(wybrany)} onClose={() => setWybrany(null)} />}
+      {wybrany && <DetailPanel szczegoly={zbudujSzczegoly(wybrany, slad)} onClose={() => setWybrany(null)} />}
       <SearchPanel />
       <div className="lewa-kolumna">
         <header className="naglowek">

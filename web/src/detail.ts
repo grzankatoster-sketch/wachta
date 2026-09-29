@@ -2,6 +2,7 @@ import type { AlertDto, JammingDto, LiveAircraft, LiveShip } from "./api";
 import { parseEvidence } from "./api";
 import { NAZWY, dopisek, podmiot, szczegoly } from "./alert-text";
 import { ocen, type Ocena } from "./ocena";
+import { podstawaSladu, skadPlynie, type StanSladu } from "./slad";
 
 /**
  * Turns one clicked map object into the three sections the detail panel shows: what it is, what it
@@ -422,7 +423,12 @@ export function kursSlownie(deg: number | null | undefined): string | null {
   return `${Math.round(deg)}° (${kierunek})`;
 }
 
-function shipDetail(s: LiveShip): Szczegoly {
+/**
+ * @param stanSladu - the ship's recent history, if it has been fetched. The panel is built the same
+ *   way with or without it; the track only ever ADDS sentences, so a pending or failed fetch costs
+ *   the reader nothing they had before.
+ */
+function shipDetail(s: LiveShip, stanSladu: StanSladu): Szczegoly {
   const rodzaj = rodzajStatku(s.shipType);
   const wezly = s.sogKt ?? null;
   const kurs = kursSlownie(s.cogDeg);
@@ -441,6 +447,10 @@ function shipDetail(s: LiveShip): Szczegoly {
     ? [`Statek jest w drodze: ${wezly!.toFixed(1)} w. kursem ${kurs ?? "nieznanym"}. Linia przed dziobem na mapie pokazuje, dokąd dopłynie w dwie minuty, jeśli nic nie zmieni.`]
     : ["Statek nie robi drogi — stoi na kotwicy, przy nabrzeżu albo dryfuje. Sam postój niczego nie znaczy: większość jednostek na tej mapie stoi."];
 
+  // "Skad przyplynal" idzie zaraz po "dokad plynie": to jedno pytanie zadane w dwie strony i
+  // czytelnik i tak zestawia te dwa zdania ze soba.
+  coZTegoWynika.push(...skadPlynie(stanSladu));
+
   return {
     tytul: s.name?.trim() || s.mmsi,
     podtytul: rodzaj ?? "jednostka o nieznanym typie",
@@ -450,14 +460,15 @@ function shipDetail(s: LiveShip): Szczegoly {
       "Źródło: AIS przez Digitraffic (Fintraffic, licencja CC BY 4.0) — transpondery statków, odbierane przez fińską sieć brzegową.",
       "AIS nadaje sam statek. Nazwa, rodzaj i status nawigacyjny to pola wpisywane przez załogę i bywają nieaktualne albo puste; pozycja, prędkość i kurs idą z odbiornika i są wiarygodniejsze.",
       "Zasięg tej sieci to Zatoka Fińska i Botnicka. Brak statku na mapie nie znaczy, że go nie ma — znaczy, że nikt go stąd nie słyszy.",
+      ...podstawaSladu(stanSladu),
     ],
     tor: null,
   };
 }
 
-export function zbudujSzczegoly(sel: Selection): Szczegoly {
+export function zbudujSzczegoly(sel: Selection, stanSladu: StanSladu = { stan: "nic" }): Szczegoly {
   if (sel.kind === "aircraft") return aircraftDetail(sel.data);
-  if (sel.kind === "ship") return shipDetail(sel.data);
+  if (sel.kind === "ship") return shipDetail(sel.data, stanSladu);
   if (sel.kind === "jamming") return jammingDetail(sel.data);
   return alertDetail(sel.data);
 }

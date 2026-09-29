@@ -110,6 +110,16 @@ export async function getAircraftTrack(hex: string, from: Date, to: Date): Promi
   return getJSON<TrackPoint[]>(`/api/aircraft/${encodeURIComponent(hex)}/track?${qs}`);
 }
 
+/**
+ * Reads one ship's recent track from `/api/ships/{mmsi}/track`.
+ *
+ * Unlike the aircraft endpoint this one takes a window in hours and clamps it server-side to 1-24,
+ * so there is nothing to validate here and no way to ask for a window that 400s.
+ */
+export async function getShipTrack(mmsi: string, hours: number): Promise<ShipTrackPoint[]> {
+  return getJSON<ShipTrackPoint[]>(`/api/ships/${encodeURIComponent(mmsi)}/track?hours=${hours}`);
+}
+
 export async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
