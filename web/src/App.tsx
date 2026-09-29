@@ -16,6 +16,7 @@ import { tripsLayer } from "./layers/trips";
 import { infrastructureLayers } from "./layers/infrastruktura";
 import { useInfrastruktura } from "./infrastruktura";
 import { sladLayers } from "./layers/slad";
+import { wyborLayers } from "./layers/wybor";
 import { useSladStatku } from "./uzyj-sladu";
 import { isCargo } from "./colors";
 import { kategoriaSamolotu, kategoriaStatku, obecne } from "./typy";
@@ -134,6 +135,9 @@ export default function App() {
         ...shipLayers(widoczneStatki, terazStatki),
         ...aircraftLayers(widoczneSamoloty, terazSamoloty),
         alertsLayer(widoczneAlarmy),
+        // Na samym wierzchu: co jest wybrane i czego ten wybor dotyczy. Bez tego klikniecie alarmu
+        // centrowalo mape na lawicy jednakowych pierscieni i czytelnik nie wiedzial, ktory jest ten.
+        ...wyborLayers(wybrany, ships),
       ];
 
   return (
