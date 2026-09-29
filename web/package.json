@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:ui": "playwright test --project=dev",
-    "test:ui:prod": "playwright test --project=prod"
+    "test:ui:prod": "playwright test --project=prod",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
     "@deck.gl/core": "^9.4.0",

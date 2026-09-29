@@ -4,6 +4,9 @@ import { aircraftLayers } from "./aircraft";
 import { alertsLayer } from "./alerts";
 import { jammingLayer } from "./jamming";
 
+/** Zegar testu rowny znacznikowi z fixture: wiek pozycji 0, wiec zadnego zliczania drogi. */
+const TERAZ = Date.parse("2026-09-28T08:00:00Z");
+
 /**
  * Regression guard for the click-to-detail feature: deck.gl only fires onClick for a layer whose
  * `pickable` prop is true. getTooltip() already worked on hover with pickable layers, which hid the
@@ -29,7 +32,7 @@ function pickable(props: unknown): boolean {
 
 describe("warstwy sa klikalne", () => {
   it("warstwa samolotow (scatterplot) jest pickable", () => {
-    const scatter = aircraftLayers([plane]).find((l) => l.id === "aircraft");
+    const scatter = aircraftLayers([plane], TERAZ).find((l) => l.id === "aircraft");
     expect(pickable(scatter!.props)).toBe(true);
   });
 

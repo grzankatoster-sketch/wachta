@@ -2,106 +2,118 @@ import { IconLayer, LineLayer, ScatterplotLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import type { LiveShip } from "../api";
 import { KATEGORIE, kategoriaStatku } from "../typy";
+import { LIMIT_STATEK_S, przezroczystosc, ruch, type Ruch } from "../ruch";
 import { GRUBOSC_OBWODKI, OBWODKA, ikona, kat } from "./ikony";
 
 /**
- * Ships, drawn as hulls that point where they are going.
+ * Ships, drawn as hulls that point where they are going and keep going between fixes.
  *
  * A vessel making way is a silhouette turned to its course with a line ahead of it; a vessel that is
  * not is a plain dot. That is not decoration. A stopped ship has no meaningful heading - AIS keeps
  * reporting the last course, or zero - so drawing it as an oriented hull would be inventing a fact.
- * The dot says "here, and not going anywhere", which is exactly what the anchor and rendezvous
- * detectors are looking at: two dots side by side in open water is what D5 calls a transfer.
+ * The dot says "here, and not going anywhere", which is what the anchor and rendezvous detectors are
+ * looking at: two dots side by side in open water is what D5 calls a transfer.
  *
  * The course line reaches where the ship will be in half an hour on its present course and speed, so
  * its LENGTH is speed, readable without a legend.
+ *
+ * Positions are dead-reckoned between fixes (see ruch.ts) because AIS lands every 140 seconds and a
+ * map that only moves then is a slideshow. A hull that stops reporting freezes and fades rather than
+ * sailing on, which is the whole point: a ship going quiet is the finding, not a gap to paper over.
  */
 
 /** Below this a vessel is manoeuvring or moored, not making way. */
 const MIN_W_RUCHU_KT = 0.5;
 
-/**
- * How far ahead the line reaches: half an hour.
- *
- * Aircraft use two minutes, and copying that here was the first attempt and a mistake: a 12-knot
- * ship covers 0.7 km in two minutes, under one pixel at the zoom this map opens on. Every ship had
- * a course line and not one was visible.
- */
+/** Course line horizon. Aircraft use two minutes; 12 knots covers 0.7 km in two minutes, one pixel. */
 const PROJEKCJA_MIN = 30;
 
 const KM_NA_MILE_MORSKA = 1.852;
-
-/** Where a ship will be in PROJEKCJA_MIN if nothing changes. Plain dead reckoning, no smoothing. */
-export function przedDziobem(s: LiveShip): [number, number] {
-  const wezly = s.sogKt ?? 0;
-  const kurs = ((s.cogDeg ?? 0) * Math.PI) / 180;
-  const km = (wezly * KM_NA_MILE_MORSKA * PROJEKCJA_MIN) / 60;
-
-  const dLat = (km / 111.32) * Math.cos(kurs);
-  const dLon = (km / (111.32 * Math.cos((s.lat * Math.PI) / 180) || 1)) * Math.sin(kurs);
-  return [s.lon + dLon, s.lat + dLat];
-}
 
 export function wRuchu(s: LiveShip): boolean {
   return (s.sogKt ?? 0) >= MIN_W_RUCHU_KT && s.cogDeg !== null && s.cogDeg !== undefined;
 }
 
+/** Where the ship is right now, counting from its last fix. */
+export function teraz(s: LiveShip, terazMs: number): Ruch {
+  return ruch(s.lat, s.lon, s.sogKt, s.cogDeg, (terazMs - Date.parse(s.ts)) / 1000, LIMIT_STATEK_S);
+}
+
+/** Where it will be at the end of the projection, measured from where it is now. */
+export function przedDziobem(s: LiveShip, terazMs: number): [number, number] {
+  const r = teraz(s, terazMs);
+  const km = ((s.sogKt ?? 0) * KM_NA_MILE_MORSKA * PROJEKCJA_MIN) / 60;
+  const kurs = ((s.cogDeg ?? 0) * Math.PI) / 180;
+  return [
+    r.lon + (km / (111.32 * Math.cos((r.lat * Math.PI) / 180) || 1)) * Math.sin(kurs),
+    r.lat + (km / 111.32) * Math.cos(kurs),
+  ];
+}
+
 const kolor = (s: LiveShip) => KATEGORIE[kategoriaStatku(s)].kolor;
 const rozmiar = (s: LiveShip) => KATEGORIE[kategoriaStatku(s)].rozmiar;
 
-export function shipLayers(data: LiveShip[]): Layer[] {
+export function shipLayers(data: LiveShip[], terazMs: number): Layer[] {
   const plynace = data.filter(wRuchu);
   const stojace = data.filter((s) => !wRuchu(s));
-  const przejscie = { getPosition: 900, getSourcePosition: 900, getTargetPosition: 900 };
+  const gdzie = (s: LiveShip): [number, number] => {
+    const r = teraz(s, terazMs);
+    return [r.lon, r.lat];
+  };
+  const alfa = (s: LiveShip) => przezroczystosc(teraz(s, terazMs));
+
+  // Bez transitions na pozycji: znacznik i tak przesuwa sie co klatke, a przejscie deck.gl
+  // startowaloby od nowa przy kazdym tyknieciu zegara i zostawaloby w tyle za wlasnym celem.
+  const wyzwalacze = { updateTriggers: { getPosition: terazMs, getSourcePosition: terazMs, getTargetPosition: terazMs, getColor: terazMs, getFillColor: terazMs } };
 
   return [
     new LineLayer<LiveShip>({
       id: "ship-course",
       data: plynace,
-      getSourcePosition: (s) => [s.lon, s.lat],
-      getTargetPosition: przedDziobem,
-      getColor: (s) => [...kolor(s), 150] as [number, number, number, number],
+      getSourcePosition: gdzie,
+      getTargetPosition: (s) => przedDziobem(s, terazMs),
+      getColor: (s) => [...kolor(s), Math.min(150, alfa(s))] as [number, number, number, number],
       getWidth: 1.4,
       widthUnits: "pixels",
-      transitions: przejscie,
+      ...wyzwalacze,
     }),
     new ScatterplotLayer<LiveShip>({
       id: "ships-stopped",
       data: stojace,
-      getPosition: (s) => [s.lon, s.lat],
-      getFillColor: kolor,
+      getPosition: gdzie,
+      getFillColor: (s) => [...kolor(s), alfa(s)] as [number, number, number, number],
       getRadius: (s) => rozmiar(s) / 5,
       radiusUnits: "pixels",
       stroked: true,
       getLineColor: OBWODKA,
       lineWidthMinPixels: 0.9,
       pickable: true,
-      transitions: przejscie,
+      ...wyzwalacze,
     }),
     // Obwodka to ta sama sylwetka narysowana szerzej, pod spodem. Maska nie umie drugiego koloru,
     // a bez obrysu ciemny kadlub na ciemnej wodzie schodzi ponizej progu widocznosci.
     new IconLayer<LiveShip>({
       id: "ships-obwodka",
       data: plynace,
-      getPosition: (s) => [s.lon, s.lat],
+      getPosition: gdzie,
       getIcon: (s) => ikona(KATEGORIE[kategoriaStatku(s)].ksztalt),
       getSize: (s) => rozmiar(s) + GRUBOSC_OBWODKI,
       getAngle: (s) => kat(s.cogDeg),
-      getColor: OBWODKA,
+      getColor: (s) => [...OBWODKA, alfa(s)] as [number, number, number, number],
       sizeUnits: "pixels",
-      transitions: przejscie,
+      ...wyzwalacze,
     }),
     new IconLayer<LiveShip>({
       id: "ships",
       data: plynace,
-      getPosition: (s) => [s.lon, s.lat],
+      getPosition: gdzie,
       getIcon: (s) => ikona(KATEGORIE[kategoriaStatku(s)].ksztalt),
       getSize: rozmiar,
       getAngle: (s) => kat(s.cogDeg),
-      getColor: kolor,
+      getColor: (s) => [...kolor(s), alfa(s)] as [number, number, number, number],
       sizeUnits: "pixels",
       pickable: true,
-      transitions: przejscie,
+      ...wyzwalacze,
     }),
   ];
 }

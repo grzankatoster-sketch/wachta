@@ -16,12 +16,14 @@ import { tripsLayer } from "./layers/trips";
 import { isCargo } from "./colors";
 import { kategoriaSamolotu, kategoriaStatku, obecne } from "./typy";
 import { useLive } from "./live";
+import { useZegar } from "./zegar";
+import { najnowszy, zegarDanych } from "./ruch";
 import { replayBounds, toTrips, type Trip } from "./replay";
 import { selectionFromPicked, zbudujSzczegoly, type Selection } from "./detail";
 import { stanDanych, WSZYSTKO_WIDOCZNE, type Widoczne } from "./warstwy";
 
 export default function App() {
-  const { aircraft, ships, alerts, setAlerts, connected } = useLive();
+  const { aircraft, ships, alerts, setAlerts, connected, odebranoSamoloty, odebranoStatki } = useLive();
   const [jamming, setJamming] = useState<JammingDto[]>([]);
   const [view, setView] = useState<MapViewState>(BALTIC_VIEW);
   const [replay, setReplay] = useState<{ trips: Trip[]; start: number; max: number } | null>(null);
@@ -71,6 +73,16 @@ export default function App() {
   const widoczneAlarmy = widoczne.alarmy ? alerts : [];
   const widoczneZaklocenia = widoczne.zaklocenia ? jamming : [];
 
+  // Zegar mapy. Tyka 10 razy na sekunde i przesuwa znaczniki miedzy odczytami - bez tego samolot
+  // stoi minute, a potem przeskakuje 14 km naraz. Czas liczymy na ZEGARZE DANYCH: najnowszy
+  // znacznik z paczki plus to, ile realnie uplynelo od jej odebrania. Dzieki temu rozjechany zegar
+  // w przegladarce nie oznacza calego ruchu jako przestarzaly.
+  const tik = useZegar(10);
+  const najnowszySamolot = najnowszy(aircraft.map((a) => a.ts));
+  const najnowszyStatek = najnowszy(ships.map((s) => s.ts));
+  const terazSamoloty = najnowszySamolot === null ? tik : zegarDanych(najnowszySamolot, odebranoSamoloty, tik);
+  const terazStatki = najnowszyStatek === null ? tik : zegarDanych(najnowszyStatek, odebranoStatki, tik);
+
   // Wiek najswiezszej pozycji. Wczesniej szlo tu null, wiec zdanie o swiezosci nigdy sie nie
   // pokazywalo - mapa wygladala tak samo, czy dane mialy 5 sekund, czy przyszly ostatni raz kwadrans
   // temu. Brak danych zostaje nullem: "nie wiem, ile to ma lat" to nie to samo co "jest swieze".
@@ -103,8 +115,8 @@ export default function App() {
         jammingLayer(widoczneZaklocenia),
         // Statki pod samolotami: jest ich osiem razy wiecej i sa mniejsze, wiec lezac na wierzchu
         // zabieraly by klikniecia maszynom, ktorych i tak jest na mapie garstka.
-        ...shipLayers(widoczneStatki),
-        ...aircraftLayers(widoczneSamoloty),
+        ...shipLayers(widoczneStatki, terazStatki),
+        ...aircraftLayers(widoczneSamoloty, terazSamoloty),
         alertsLayer(widoczneAlarmy),
       ];
 

@@ -4,6 +4,9 @@ import { KATEGORIE } from "../typy";
 import { BASEMAP_LAND, BASEMAP_SEA, GREY, LABEL, contrastRatio } from "../colors";
 import type { LiveAircraft } from "../api";
 
+/** Zegar testu rowny znacznikowi z fixture: wiek pozycji 0, wiec zadnego zliczania drogi. */
+const TERAZ = Date.parse("2026-09-28T08:00:00Z");
+
 const plane = (over: Partial<LiveAircraft>): LiveAircraft => ({
   hex: "3c6444", flight: "FORTE10", typeCode: "Q4", isMilitary: true, lat: 55, lon: 19,
   altBaroFt: 30000, onGround: false, gsKt: 400, trackDeg: 90, ts: "2026-09-28T08:00:00Z", ...over,
@@ -12,15 +15,19 @@ const plane = (over: Partial<LiveAircraft>): LiveAircraft => ({
 describe("warstwy samolotow", () => {
   it("etykieta wojskowa ma kolor czytelny na podkladzie, a nie bialy", () => {
     // Regresja: getColor bylo wpisane na sztywno jako [240,240,240] i napisy znikaly w tle.
-    const labels = aircraftLayers([plane({})]).find((l) => l.id === "aircraft-labels");
+    const labels = aircraftLayers([plane({})], TERAZ).find((l) => l.id === "aircraft-labels");
     expect(labels, "warstwa etykiet").toBeDefined();
-    const color = (labels!.props as unknown as { getColor: [number, number, number] }).getColor;
-    expect(contrastRatio(color, BASEMAP_LAND)).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio(color, BASEMAP_SEA)).toBeGreaterThanOrEqual(4.5);
+    // getColor jest teraz funkcja, bo kolor niesie takze przezroczystosc zalezna od wieku pozycji.
+    // Prog kontrastu liczymy z samego RGB - kanal alfa nie zmienia barwy, tylko jej krycie.
+    const getColor = (labels!.props as unknown as
+      { getColor: (a: LiveAircraft) => [number, number, number, number] }).getColor;
+    const [r, g, b] = getColor(plane({}));
+    expect(contrastRatio([r, g, b], BASEMAP_LAND)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio([r, g, b], BASEMAP_SEA)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("pomija samoloty na ziemi", () => {
-    const layers = aircraftLayers([plane({ onGround: true }), plane({ hex: "abc123" })]);
+    const layers = aircraftLayers([plane({ onGround: true }), plane({ hex: "abc123" })], TERAZ);
     expect((layers[0].props as unknown as { data: LiveAircraft[] }).data).toHaveLength(1);
   });
 });
@@ -63,7 +70,7 @@ describe("widocznosc znacznikow na podkladzie", () => {
     const warstwy = aircraftLayers([
       plane({ gsKt: 420, trackDeg: 90 }),
       plane({ hex: "bbb", gsKt: 0, trackDeg: null }),
-    ]);
+    ], TERAZ);
     const ile = (id: string) =>
       (warstwy.find((l) => l.id === id)!.props as unknown as { data: LiveAircraft[] }).data.length;
     expect(ile("aircraft")).toBe(1);

@@ -5,13 +5,17 @@ import type { AlertDto, LiveAircraft, LiveShip } from "./api";
 export function useLive() {
   const [aircraft, setAircraft] = useState<LiveAircraft[]>([]);
   const [ships, setShips] = useState<LiveShip[]>([]);
+  // Kiedy paczka DOTARLA, wg zegara tej przegladarki. Razem z najnowszym znacznikiem czasu z paczki
+  // pozwala liczyc wiek pozycji bez zakladania, ze zegar serwera i zegar tego komputera sa zgodne.
+  const [odebranoSamoloty, setOdebranoSamoloty] = useState(0);
+  const [odebranoStatki, setOdebranoStatki] = useState(0);
   const [alerts, setAlerts] = useState<AlertDto[]>([]);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     const hub = new HubConnectionBuilder().withUrl("/hubs/live").withAutomaticReconnect().configureLogging(LogLevel.Warning).build();
-    hub.on("aircraft", (list: LiveAircraft[]) => setAircraft(list));
-    hub.on("ships", (list: LiveShip[]) => setShips(list));
+    hub.on("aircraft", (list: LiveAircraft[]) => { setAircraft(list); setOdebranoSamoloty(Date.now()); });
+    hub.on("ships", (list: LiveShip[]) => { setShips(list); setOdebranoStatki(Date.now()); });
     hub.on("alerts", (list: AlertDto[]) => setAlerts((prev) => [...list, ...prev].slice(0, 200)));
     hub.onreconnecting(() => setConnected(false));
     hub.onreconnected(() => setConnected(true));
@@ -29,5 +33,5 @@ export function useLive() {
     };
   }, []);
 
-  return { aircraft, ships, alerts, setAlerts, connected };
+  return { aircraft, ships, alerts, setAlerts, connected, odebranoSamoloty, odebranoStatki };
 }
